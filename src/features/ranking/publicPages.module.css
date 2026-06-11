@@ -200,6 +200,7 @@
 
 .refreshButton {
   align-self: end;
+  box-sizing: border-box;
   min-height: 42px;
   padding: 0 16px;
 }
@@ -217,6 +218,7 @@
 }
 
 .segmented {
+  box-sizing: border-box;
   gap: 4px;
   padding: 4px;
   border: 1px solid #cbd8e6;
@@ -250,13 +252,13 @@
 
 .boardTable {
   width: 100%;
-  min-width: 680px;
+  min-width: 860px;
   border-collapse: collapse;
 }
 
 .boardTable th,
 .boardTable td {
-  padding: 14px 16px;
+  padding: 13px 14px;
   border-bottom: 1px solid #eef2f7;
   text-align: left;
   vertical-align: middle;
@@ -273,11 +275,26 @@
 
 .boardTable td:first-child,
 .boardTable th:first-child,
+.boardTable td:nth-child(3),
+.boardTable th:nth-child(3),
 .boardTable td:nth-child(4),
 .boardTable th:nth-child(4),
 .boardTable td:nth-child(5),
-.boardTable th:nth-child(5) {
+.boardTable th:nth-child(5),
+.boardTable td:nth-child(6),
+.boardTable th:nth-child(6),
+.boardTable td:nth-child(7),
+.boardTable th:nth-child(7) {
   text-align: right;
+}
+
+.rankCell {
+  color: #10202f;
+  font-weight: 900;
+}
+
+.participantCell {
+  min-width: 180px;
 }
 
 .nameCell {
@@ -286,20 +303,77 @@
   font-weight: 800;
 }
 
-.statusChip {
+.publicId {
+  display: inline-block;
+  margin-top: 5px;
+  color: #5c6f82;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.statusChip,
+.progressChip {
   display: inline-flex;
   margin-top: 5px;
+  margin-left: 6px;
   padding: 3px 7px;
   border-radius: 6px;
-  color: #425466;
-  background: #e9f0f6;
   font-size: 0.75rem;
   font-weight: 800;
 }
 
-.unsubmittedRow {
+.statusChip {
+  color: #425466;
+  background: #e9f0f6;
+}
+
+.progressChip {
+  color: #194f46;
+  background: #dff3ed;
+}
+
+.challengeCell,
+.averageCell {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.averageCell {
+  color: #10202f;
+}
+
+.attemptCell {
+  min-width: 128px;
+  font-variant-numeric: tabular-nums;
+}
+
+.attemptBreakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  justify-content: flex-end;
+  margin-top: 5px;
+  color: #738398;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.cellLabel {
+  display: none;
+}
+
+.unrankedRow {
   color: #738398;
   background: #fbfcfe;
+}
+
+.groupRow td {
+  padding: 11px 14px;
+  color: #425466;
+  background: #f0f6f4;
+  font-size: 0.8rem;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
 .emptyState {
@@ -355,6 +429,12 @@
     width: 100%;
   }
 
+  .rankingHeader h1 {
+    font-size: 1.9rem;
+    line-height: 1.08;
+    overflow-wrap: anywhere;
+  }
+
   .segmented {
     width: 100%;
   }
@@ -367,42 +447,175 @@
     margin-inline: -6px;
   }
 
+  .tableWrap {
+    overflow-x: visible;
+  }
+
   .boardTable {
+    display: block;
+    width: 100%;
     min-width: 0;
-    table-layout: fixed;
-    font-size: 0.86rem;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.88rem;
+  }
+
+  .boardTable thead {
+    display: none;
+  }
+
+  .boardTable tbody {
+    display: grid;
+    width: 100%;
+    box-sizing: border-box;
+    gap: 8px;
+    padding: 8px;
+    background: #f5f8fb;
+  }
+
+  .boardTable tr {
+    display: grid;
+    width: 100%;
+    box-sizing: border-box;
+    grid-template-columns: 46px minmax(0, 1fr);
+    grid-template-areas:
+      "rank name"
+      "average average"
+      "c1 c1"
+      "c2 c2"
+      "c3 c3"
+      "attempts attempts";
+    overflow: hidden;
+    border: 1px solid #dfe7ef;
+    border-radius: 8px;
+    background: #ffffff;
   }
 
   .boardTable th,
   .boardTable td {
-    padding: 10px 6px;
+    display: block;
+    box-sizing: border-box;
+    min-width: 0;
+    padding: 8px;
+    border-bottom: 0;
   }
 
-  .boardTable th:first-child,
-  .boardTable td:first-child {
-    width: 42px;
+  .boardTable td:first-child,
+  .boardTable td:nth-child(3),
+  .boardTable td:nth-child(4),
+  .boardTable td:nth-child(5),
+  .boardTable td:nth-child(6),
+  .boardTable td:nth-child(7) {
+    text-align: left;
   }
 
-  .boardTable th:nth-child(3),
-  .boardTable td:nth-child(3) {
-    width: 68px;
+  .rankCell {
+    grid-area: rank;
+    display: grid;
+    align-content: center;
+    background: #f5f8fb;
   }
 
-  .boardTable th:nth-child(4),
-  .boardTable td:nth-child(4) {
-    width: 62px;
+  .participantCell {
+    grid-area: name;
+    min-width: 0;
   }
 
-  .boardTable th:nth-child(5),
-  .boardTable td:nth-child(5) {
-    width: 58px;
+  .challengeCell {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+    border-top: 1px solid #eef2f7;
+    background: #fbfcfe;
+  }
+
+  .challengeCell:nth-child(3) {
+    grid-area: c1;
+  }
+
+  .challengeCell:nth-child(4) {
+    grid-area: c2;
+  }
+
+  .challengeCell:nth-child(5) {
+    grid-area: c3;
+  }
+
+  .averageCell {
+    grid-area: average;
+    display: flex;
+    gap: 3px;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid #eef2f7;
+    background: #f5f8fb;
+  }
+
+  .attemptCell {
+    grid-area: attempts;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 10px;
+    align-items: center;
+    min-width: 0;
+    border-top: 1px solid #eef2f7;
+  }
+
+  .attemptCell .cellLabel {
+    display: inline;
+  }
+
+  .attemptBreakdown {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    margin-top: 0;
+  }
+
+  .cellLabel {
+    display: block;
+    color: #738398;
+    font-size: 0.66rem;
+    font-weight: 900;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  .cellValue {
+    display: block;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .groupRow {
+    display: grid;
+    grid-template-columns: 1fr;
+    border: 0;
+    background: transparent;
+  }
+
+  .groupRow td {
+    display: block;
+    grid-column: 1 / -1;
+    padding: 8px 4px 2px;
+    background: transparent;
+    color: #425466;
+    font-size: 0.72rem;
   }
 
   .nameCell {
     overflow-wrap: anywhere;
   }
 
-  .statusChip {
+  .publicId {
+    display: block;
+  }
+
+  .statusChip,
+  .progressChip {
+    margin-left: 0;
+    margin-right: 5px;
     font-size: 0.68rem;
   }
 }
