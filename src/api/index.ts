@@ -24,6 +24,7 @@ import type {
   SubmitResult,
   TeacherSchoolView,
 } from './types'
+import { createFirestoreApi } from './firestore'
 import { createMockApi } from './mock'
 
 export interface CompetitionApi {
@@ -84,10 +85,6 @@ export interface CompetitionApi {
   getMyRole(): Promise<RoleDoc | null>
 }
 
-// 구현 스위치 — task vb-116-api-rules-v2가 ./firestore.ts(v2) 작성 후 연결.
-// v1 구현은 ./firestore.ts.v1bak 참고용 보존. mock = UI 병렬 개발용 (CONTRACT §8)
+// 구현 스위치 — mock = UI 개발용 (CONTRACT §8) / firestore = 실서비스 (v2)
 const impl = import.meta.env.VITE_API_IMPL ?? 'mock'
-if (impl !== 'mock') {
-  throw new Error(`VITE_API_IMPL=${impl} — v2 구현 전 (vb-116-api-rules-v2 담당)`)
-}
-export const api: CompetitionApi = createMockApi()
+export const api: CompetitionApi = impl === 'firestore' ? createFirestoreApi() : createMockApi()
