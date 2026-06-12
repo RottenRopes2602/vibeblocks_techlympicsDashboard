@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
 import { api } from '../../api'
 import type { Role, RoleDoc } from '../../api/types'
+import { useT } from '../../lib/i18n'
 import AuthHeader from './AuthHeader'
 import RoleLanding from './RoleLanding'
 import { useAuthSession } from './session'
@@ -21,6 +22,7 @@ export default function ConsoleGate({
   allowedRoles: Role[]
   children: ReactNode
 }) {
+  const t = useT()
   const { user, loading: authLoading, isSignedIn } = useAuthSession()
   const [role, setRole] = useState<RoleDoc | null>(null)
   const [roleLoading, setRoleLoading] = useState(false)
@@ -52,7 +54,7 @@ export default function ConsoleGate({
       <section className="auth-stack">
         <section className="auth-panel">
           <p className="auth-eyebrow">{label}</p>
-          <h2>Checking access...</h2>
+          <h2>{t('auth.checkingAccess')}</h2>
         </section>
       </section>
     )
@@ -75,7 +77,7 @@ export default function ConsoleGate({
     return (
       <section className="auth-stack">
         <AuthHeader user={user} role={role} label={label} onRefresh={refreshRole} />
-        <RoleLanding user={user} title={`${label} access required`} onRoleChanged={refreshRole} />
+        <RoleLanding user={user} title={t('auth.accessRequired', { label })} onRoleChanged={refreshRole} />
       </section>
     )
   }

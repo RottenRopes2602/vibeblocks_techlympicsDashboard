@@ -8,6 +8,8 @@ import {
   signInWithPopup,
 } from 'firebase/auth'
 import { auth } from '../../lib/firebase'
+import type { TFunction } from '../../lib/i18n'
+import { useT } from '../../lib/i18n'
 import { useToast } from '../../lib/toast'
 
 type AuthMode = 'sign-in' | 'sign-up'
@@ -37,18 +39,18 @@ function GoogleIcon() {
   )
 }
 
-function errorText(error: unknown): string {
+function errorText(error: unknown, t: TFunction): string {
   const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
-  if (code === 'auth/user-not-found') return 'No account was found for that email address.'
-  if (code === 'auth/invalid-email') return 'Enter a valid email address.'
-  if (code === 'auth/too-many-requests') return 'Too many attempts. Wait a moment, then try again.'
-  if (code === 'auth/network-request-failed') return 'Network error. Check your connection and try again.'
-  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') return 'Email or password is incorrect.'
+  if (code === 'auth/user-not-found') return t('auth.noAccount')
+  if (code === 'auth/invalid-email') return t('auth.invalidEmail')
+  if (code === 'auth/too-many-requests') return t('auth.tooManyAttempts')
+  if (code === 'auth/network-request-failed') return t('auth.networkError')
+  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') return t('auth.badCredential')
   return error instanceof Error ? error.message : String(error)
 }
 
 export default function AuthPanel({
-  title = 'Sign in',
+  title,
   mode,
   onSignedIn,
 }: {
@@ -67,8 +69,10 @@ export default function AuthPanel({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const toast = useToast()
+  const t = useT()
   const authMode = mode ?? selectedMode
   const isFixedMode = Boolean(mode)
+  const panelTitle = title ?? t('auth.signIn')
 
   const finish = async () => {
     if (onSignedIn) await onSignedIn()
@@ -80,9 +84,9 @@ export default function AuthPanel({
     try {
       await signInWithPopup(auth, googleProvider)
       await finish()
-      toast(authMode === 'sign-up' ? 'Account ready.' : 'Signed in.', 'success')
+      toast(authMode === 'sign-up' ? t('auth.accountReady') : t('auth.signedIn'), 'success')
     } catch (err) {
-      const message = errorText(err)
+      const message = errorText(err, t)
       setError(message)
       toast(message, 'error')
     } finally {
@@ -101,9 +105,9 @@ export default function AuthPanel({
         await signInWithEmailAndPassword(auth, email.trim(), password)
       }
       await finish()
-      toast(authMode === 'sign-up' ? 'Account created.' : 'Signed in.', 'success')
+      toast(authMode === 'sign-up' ? t('auth.accountCreated') : t('auth.signedIn'), 'success')
     } catch (err) {
-      const message = errorText(err)
+      const message = errorText(err, t)
       setError(message)
       toast(message, 'error')
     } finally {
@@ -118,9 +122,9 @@ export default function AuthPanel({
     try {
       await sendPasswordResetEmail(auth, resetEmail.trim())
       setResetOpen(false)
-      toast('Password reset email sent. Check your inbox.', 'success')
+      toast(t('auth.resetEmailSent'), 'success')
     } catch (err) {
-      const message = errorText(err)
+      const message = errorText(err, t)
       setResetError(message)
       toast(message, 'error')
     } finally {
@@ -129,32 +133,32 @@ export default function AuthPanel({
   }
 
   return (
-    <section className="auth-panel" aria-label={title}>
+    <section className="auth-panel" aria-label={panelTitle}>
       <div className="auth-panel-head">
-        <p className="auth-eyebrow">Account</p>
-        <h2>{title}</h2>
+        <p className="auth-eyebrow">{t('common.account')}</p>
+        <h2>{panelTitle}</h2>
       </div>
       {!isFixedMode ? (
-        <div className="auth-segmented" role="group" aria-label="Authentication mode">
+        <div className="auth-segmented" role="group" aria-label={t('auth.authenticationMode')}>
           <button type="button" className={authMode === 'sign-in' ? 'active' : ''} onClick={() => setSelectedMode('sign-in')}>
-            Sign in
+            {t('auth.signIn')}
           </button>
           <button type="button" className={authMode === 'sign-up' ? 'active' : ''} onClick={() => setSelectedMode('sign-up')}>
-            Create account
+            {t('auth.createAccount')}
           </button>
         </div>
       ) : null}
       <button className="auth-button google" type="button" onClick={signInWithGoogle} disabled={busy}>
         <GoogleIcon />
-        <span>{authMode === 'sign-up' ? 'Sign up with Google' : 'Sign in with Google'}</span>
+        <span>{authMode === 'sign-up' ? t('auth.signUpGoogle') : t('auth.signInGoogle')}</span>
       </button>
       <form className="auth-form" onSubmit={signInWithEmail}>
         <label>
-          Email
+          {t('common.email')}
           <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" />
         </label>
         <label>
-          <span>Password</span>
+          <span>{t('common.password')}</span>
           <div className="auth-password-field">
             <input
               value={password}
@@ -165,8 +169,8 @@ export default function AuthPanel({
             <button
               className="auth-icon-button"
               type="button"
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-              title={showPassword ? 'Hide password' : 'Show password'}
+              aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+              title={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
               onClick={() => setShowPassword((value) => !value)}
             >
               {showPassword ? '🙈' : '👁'}
@@ -174,7 +178,7 @@ export default function AuthPanel({
           </div>
         </label>
         <button className="auth-button primary" type="submit" disabled={busy || !email.trim() || password.length < 6}>
-          {busy ? 'Working...' : authMode === 'sign-up' ? 'Create account' : 'Sign in'}
+          {busy ? t('common.working') : authMode === 'sign-up' ? t('auth.createAccount') : t('auth.signIn')}
         </button>
       </form>
       {authMode === 'sign-in' ? (
@@ -188,7 +192,7 @@ export default function AuthPanel({
               setResetOpen(true)
             }}
           >
-            Forgot password?
+            {t('auth.forgotPassword')}
           </button>
         </div>
       ) : null}
@@ -197,12 +201,12 @@ export default function AuthPanel({
         <div className="auth-modal-backdrop" role="presentation">
           <section className="auth-modal" role="dialog" aria-modal="true" aria-labelledby="password-reset-title">
             <div className="auth-panel-head">
-              <p className="auth-eyebrow">Password reset</p>
-              <h2 id="password-reset-title">Send reset email</h2>
+              <p className="auth-eyebrow">{t('auth.passwordReset')}</p>
+              <h2 id="password-reset-title">{t('auth.sendResetEmail')}</h2>
             </div>
             <form className="auth-form" onSubmit={resetPassword}>
               <label>
-                Email
+                {t('common.email')}
                 <input
                   autoFocus
                   value={resetEmail}
@@ -214,10 +218,10 @@ export default function AuthPanel({
               {resetError ? <div className="auth-alert">{resetError}</div> : null}
               <div className="auth-actions auth-modal-actions">
                 <button className="auth-button" type="button" onClick={() => setResetOpen(false)} disabled={resetBusy}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button className="auth-button primary" type="submit" disabled={resetBusy || !resetEmail.trim()}>
-                  {resetBusy ? 'Sending...' : 'Send email'}
+                  {resetBusy ? t('auth.sending') : t('auth.sendEmail')}
                 </button>
               </div>
             </form>

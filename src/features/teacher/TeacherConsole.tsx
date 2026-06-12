@@ -19,6 +19,8 @@ import { useAuthSession } from '../auth/session'
 import '../auth/auth.css'
 import LeaderboardTable from '../ranking/LeaderboardTable'
 import { ShimmerText } from '../../lib/Shimmer'
+import type { TFunction } from '../../lib/i18n'
+import { useT } from '../../lib/i18n'
 import { useToast } from '../../lib/toast'
 
 type ActiveClass = {
@@ -58,10 +60,10 @@ function gradeValue(classInfo: ClassDoc): GradeFilter {
   return grade === 'other' ? 'other' : `grade:${grade}`
 }
 
-function gradeLabel(value: GradeFilter): string {
-  if (value === 'all') return 'All'
-  if (value === 'other') return 'Other'
-  return `Grade ${value.replace('grade:', '')}`
+function gradeLabel(value: GradeFilter, t: TFunction): string {
+  if (value === 'all') return t('common.all')
+  if (value === 'other') return t('common.other')
+  return t('teacher.gradeLabel', { grade: value.replace('grade:', '') })
 }
 
 function formatDate(value: string): string {
@@ -73,11 +75,11 @@ function formatDate(value: string): string {
   }).format(new Date(value))
 }
 
-function statusLabel(status: ParticipantStatus): string {
-  if (status === 'approved') return 'Approved'
-  if (status === 'rejected') return 'Rejected'
-  if (status === 'withdrawn') return 'Withdrawn'
-  return 'Pending'
+function statusLabel(status: ParticipantStatus, t: TFunction): string {
+  if (status === 'approved') return t('common.approved')
+  if (status === 'rejected') return t('common.rejected')
+  if (status === 'withdrawn') return t('common.withdrawn')
+  return t('common.pending')
 }
 
 function errorText(error: unknown): string {
@@ -109,6 +111,7 @@ async function copyText(value: string): Promise<void> {
 export default function TeacherConsole() {
   const navigate = useNavigate()
   const toast = useToast()
+  const t = useT()
   const { user, loading: authLoading, isSignedIn } = useAuthSession()
   const [role, setRole] = useState<RoleDoc | null>(null)
   const [schools, setSchools] = useState<TeacherSchoolView[]>([])
@@ -151,15 +154,15 @@ export default function TeacherConsole() {
         return nextSchools[0]?.classes[0]?.id ?? ''
       })
       setShowGate(nextSchools.length === 0)
-      setNotice(nextSchools.length === 0 ? 'Add your first school with a teacher code.' : '')
+      setNotice(nextSchools.length === 0 ? t('teacher.addFirstSchool') : '')
     } catch (error) {
       setSchools([])
       setShowGate(true)
-      setNotice(errorText(error) === 'FORBIDDEN' ? 'Teacher code required.' : errorText(error))
+      setNotice(errorText(error) === 'FORBIDDEN' ? t('teacher.teacherCodeRequired') : errorText(error))
     } finally {
       setLoadingSchools(false)
     }
-  }, [isSignedIn])
+  }, [isSignedIn, t])
 
   useEffect(() => {
     if (authLoading) return
@@ -187,7 +190,7 @@ export default function TeacherConsole() {
     await refreshSchools()
     setShowGate(false)
     setNotice('')
-    toast('School added.', 'success')
+    toast(t('teacher.schoolAdded'), 'success')
   }
 
   const refreshAll = async () => {
@@ -198,8 +201,8 @@ export default function TeacherConsole() {
     return (
       <main className="teacher-page">
         <style>{teacherStyles}</style>
-        <section className="teacher-shell" aria-label="Teacher dashboard">
-          <div className="panel muted loading-panel">Loading teacher console...</div>
+        <section className="teacher-shell" aria-label={t('teacher.dashboard')}>
+          <div className="panel muted loading-panel">{t('teacher.loadingConsole')}</div>
         </section>
       </main>
     )
@@ -208,12 +211,12 @@ export default function TeacherConsole() {
   return (
     <main className="teacher-page">
       <style>{teacherStyles}</style>
-      <section className="teacher-shell" aria-label="Teacher dashboard">
-        <AuthHeader user={user} role={role} label="Teacher Console" onRefresh={refreshAll} />
+      <section className="teacher-shell" aria-label={t('teacher.dashboard')}>
+        <AuthHeader user={user} role={role} label={t('teacher.console')} onRefresh={refreshAll} />
         <header className="teacher-topbar">
           <div>
             <p className="teacher-kicker">Techlympics 2026</p>
-            <h1>Teacher Console</h1>
+            <h1>{t('teacher.console')}</h1>
           </div>
         </header>
 
@@ -223,7 +226,7 @@ export default function TeacherConsole() {
           <TeacherCodeGate user={user} onBound={handleBound} onCancel={schools.length > 0 ? () => setShowGate(false) : undefined} />
         ) : null}
 
-        {loadingSchools || roleLoading ? <div className="panel muted">Loading teacher schools...</div> : null}
+        {loadingSchools || roleLoading ? <div className="panel muted">{t('teacher.loadingSchools')}</div> : null}
 
         {!showGate && schools.length > 0 && activeSchool ? (
           <Dashboard
@@ -272,6 +275,7 @@ function Dashboard({
   onWorkspaceMode: (mode: WorkspaceMode) => void
   onClassChanged: () => Promise<void>
 }) {
+  const t = useT()
   const [classView, setClassView] = useState<ClassViewMode>('cards')
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>('all')
   const [addClassOpen, setAddClassOpen] = useState(false)
@@ -315,7 +319,7 @@ function Dashboard({
 
   return (
     <section className="dashboard">
-      <div className="school-tabs" role="tablist" aria-label="Schools">
+      <div className="school-tabs" role="tablist" aria-label={t('teacher.schoolsTab')}>
         {schools.map((view) => (
           <button
             key={view.school.id}
@@ -332,48 +336,48 @@ function Dashboard({
         <div>
           <h2>{activeSchool.school.name}</h2>
           <p>
-            {filteredClasses.length} of {activeSchool.classes.length} classes
+            {t('teacher.classesCount', { visible: filteredClasses.length, total: activeSchool.classes.length })}
           </p>
         </div>
         <div className="class-toolbar-actions">
           {gradeOptions.length > 1 ? (
-            <div className="grade-filter" aria-label="Class grade filter">
-              <div className="segmented compact-segmented grade-filter-tabs" role="group" aria-label="Class grade">
+            <div className="grade-filter" aria-label={t('teacher.classGrade')}>
+              <div className="segmented compact-segmented grade-filter-tabs" role="group" aria-label={t('teacher.classGrade')}>
                 {gradeOptions.map((option) => (
                   <button key={option} type="button" className={gradeFilter === option ? 'active' : ''} onClick={() => changeGradeFilter(option)}>
-                    {gradeLabel(option)}
+                    {gradeLabel(option, t)}
                   </button>
                 ))}
               </div>
               <label className="grade-filter-select">
-                Grade
+                {t('common.grade')}
                 <select value={gradeFilter} onChange={(event) => changeGradeFilter(event.target.value as GradeFilter)}>
                   {gradeOptions.map((option) => (
                     <option key={option} value={option}>
-                      {gradeLabel(option)}
+                      {gradeLabel(option, t)}
                     </option>
                   ))}
                 </select>
               </label>
             </div>
           ) : null}
-          <div className="segmented compact-segmented" role="group" aria-label="Class view">
+          <div className="segmented compact-segmented" role="group" aria-label={t('teacher.classView')}>
             <button type="button" className={classView === 'cards' ? 'active' : ''} onClick={() => setClassView('cards')}>
-              Cards
+              {t('teacher.cards')}
             </button>
             <button type="button" className={classView === 'list' ? 'active' : ''} onClick={() => setClassView('list')}>
-              List
+              {t('teacher.list')}
             </button>
           </div>
           <button type="button" onClick={() => setAddClassOpen(true)}>
-            Add class
+            {t('teacher.addClass')}
           </button>
         </div>
       </div>
 
       {filteredClasses.length > 0 ? (
         classView === 'cards' ? (
-          <section className="class-grid" aria-label={`${activeSchool.school.name} classes`}>
+          <section className="class-grid" aria-label={t('teacher.classListLabel', { schoolName: activeSchool.school.name })}>
             {filteredClasses.map((classInfo) => (
               <ClassCard
                 key={classInfo.id}
@@ -403,7 +407,7 @@ function Dashboard({
           />
         )
       ) : activeSchool.classes.length > 0 ? (
-        <div className="panel muted">No classes in this grade.</div>
+        <div className="panel muted">{t('teacher.noClassesGrade')}</div>
       ) : null}
 
       {activeClass && selectedClassVisible ? (
@@ -414,7 +418,7 @@ function Dashboard({
           onClassChanged={onClassChanged}
         />
       ) : (
-        <div className="panel">No classes yet.</div>
+        <div className="panel">{t('teacher.noClassesYet')}</div>
       )}
 
       {addClassOpen ? (
@@ -448,10 +452,11 @@ function ClassListView({
   onViewRanking: (classId: string) => void
   onClassChanged: () => Promise<void>
 }) {
+  const t = useT()
   const selectedClass = classes.find((classInfo) => classInfo.id === selectedClassId) ?? classes[0]
 
   return (
-    <section className="class-list-layout" aria-label={`${schoolName} class list`}>
+    <section className="class-list-layout" aria-label={t('teacher.classListLabel', { schoolName })}>
       <div className="class-list" role="list">
         {classes.map((classInfo) => (
           <button
@@ -462,7 +467,7 @@ function ClassListView({
           >
             <span>{classInfo.name}</span>
             <strong>{classInfo.joinCode}</strong>
-            <em>{classInfo.joinActive ? 'Active' : 'Disabled'}</em>
+            <em>{classInfo.joinActive ? t('common.active') : t('common.disabled')}</em>
           </button>
         ))}
       </div>
@@ -488,6 +493,7 @@ function AddClassModal({
   onCreated: (classInfo: ClassDoc) => Promise<void>
 }) {
   const toast = useToast()
+  const t = useT()
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -502,13 +508,13 @@ function AddClassModal({
   const createClass = async () => {
     const trimmed = name.trim()
     if (!trimmed) {
-      toast('Enter a class name.', 'error')
+      toast(t('teacher.enterClassName'), 'error')
       return
     }
     setBusy(true)
     try {
       const classInfo = await api.addClass({ eventId: school.school.eventId, schoolId: school.school.id }, trimmed)
-      toast(`${classInfo.name} added.`, 'success')
+      toast(t('teacher.classAdded', { className: classInfo.name }), 'success')
       await onCreated(classInfo)
     } catch (error) {
       toast(errorText(error), 'error')
@@ -521,24 +527,24 @@ function AddClassModal({
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
       <form
         className="dialog-panel"
-        aria-label="Add class"
+        aria-label={t('teacher.addClass')}
         onClick={(event) => event.stopPropagation()}
         onSubmit={(event) => {
           event.preventDefault()
           void createClass()
         }}
       >
-        <h2>Add class</h2>
+        <h2>{t('teacher.addClass')}</h2>
         <label>
-          Class name
-          <input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="Example: 4 Amanah" />
+          {t('common.className')}
+          <input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder={t('teacher.exampleClass')} />
         </label>
         <div className="row-actions">
           <button className="ghost" type="button" onClick={onClose} disabled={busy}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <button type="submit" disabled={busy}>
-            {busy ? 'Adding...' : 'Add class'}
+            {busy ? t('teacher.adding') : t('teacher.addClass')}
           </button>
         </div>
       </form>
@@ -562,18 +568,19 @@ function ClassCard({
   onClassChanged: () => Promise<void>
 }) {
   const toast = useToast()
+  const t = useT()
   const [qrOpen, setQrOpen] = useState(false)
   const [busyAction, setBusyAction] = useState<'reset' | 'toggle' | ''>('')
   const url = joinUrl(classInfo.joinCode)
   const grade = classGrade(classInfo.name)
-  const gradeText = grade === 'other' ? null : `Grade ${grade}`
+  const gradeText = grade === 'other' ? null : t('teacher.gradeLabel', { grade })
 
   const resetCode = async () => {
-    if (!window.confirm('Reset this class code? The old code becomes invalid immediately.')) return
+    if (!window.confirm(t('teacher.resetClassCodeConfirm'))) return
     setBusyAction('reset')
     try {
       const nextCode = await api.resetJoinCode(classPath(classInfo))
-      toast(`Class code reset to ${nextCode}.`, 'success')
+      toast(t('teacher.classCodeReset', { code: nextCode }), 'success')
       await onClassChanged()
     } catch (error) {
       toast(errorText(error), 'error')
@@ -587,7 +594,7 @@ function ClassCard({
     setBusyAction('toggle')
     try {
       await api.setJoinActive(classPath(classInfo), nextActive)
-      toast(nextActive ? 'Class code enabled.' : 'Class code disabled for new joins.', 'success')
+      toast(nextActive ? t('teacher.classCodeEnabled') : t('teacher.classCodeDisabled'), 'success')
       await onClassChanged()
     } catch (error) {
       toast(errorText(error), 'error')
@@ -599,7 +606,7 @@ function ClassCard({
   const copyClassCode = async () => {
     try {
       await copyText(classInfo.joinCode)
-      toast(`Class code ${classInfo.joinCode} copied.`, 'success')
+      toast(t('teacher.classCodeCopied', { code: classInfo.joinCode }), 'success')
     } catch (error) {
       toast(errorText(error), 'error')
     }
@@ -616,24 +623,24 @@ function ClassCard({
           <ShimmerText busy={busyAction !== ''}>{classInfo.joinCode}</ShimmerText>
         </strong>
         <em>
-          <ShimmerText busy={busyAction === 'toggle'}>{classInfo.joinActive ? 'Active for new joins' : 'New joins disabled'}</ShimmerText>
+          <ShimmerText busy={busyAction === 'toggle'}>{classInfo.joinActive ? t('teacher.activeForNewJoins') : t('teacher.newJoinsDisabled')}</ShimmerText>
         </em>
       </button>
-      <button className="qr-box" type="button" onClick={() => setQrOpen(true)} aria-label={`Open QR code for ${classInfo.name}`}>
+      <button className="qr-box" type="button" onClick={() => setQrOpen(true)} aria-label={t('teacher.openQrFor', { className: classInfo.name })}>
         <QRCodeSVG value={url} size={112} marginSize={1} />
       </button>
       <div className="row-actions compact">
         <button className="secondary" type="button" onClick={copyClassCode}>
-          Copy
+          {t('common.copy')}
         </button>
         <button className="secondary" type="button" onClick={onViewRanking}>
-          Ranking
+          {t('common.ranking')}
         </button>
         <button className="secondary" type="button" onClick={toggleActive} disabled={busyAction === 'toggle'}>
-          {busyAction === 'toggle' ? 'Saving...' : classInfo.joinActive ? 'Disable' : 'Enable'}
+          {busyAction === 'toggle' ? t('common.saving') : classInfo.joinActive ? t('common.disable') : t('common.enable')}
         </button>
         <button className="danger" type="button" onClick={resetCode} disabled={busyAction === 'reset'}>
-          {busyAction === 'reset' ? 'Resetting...' : 'Reset'}
+          {busyAction === 'reset' ? t('admin.resetting') : t('common.reset')}
         </button>
       </div>
       {qrOpen ? (
@@ -654,6 +661,7 @@ function PrintSheet({
   joinUrlValue: string
   onClose: () => void
 }) {
+  const t = useT()
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
@@ -664,16 +672,16 @@ function PrintSheet({
 
   return (
     <div className="modal-backdrop print-modal" role="presentation" onClick={onClose}>
-      <div className="print-dialog" role="dialog" aria-modal="true" aria-label={`${classInfo.name} QR code`} onClick={(event) => event.stopPropagation()}>
+      <div className="print-dialog" role="dialog" aria-modal="true" aria-label={t('teacher.qrCodeLabel', { className: classInfo.name })} onClick={(event) => event.stopPropagation()}>
         <div className="print-toolbar">
           <button className="ghost" type="button" onClick={onClose}>
-            Close
+            {t('common.close')}
           </button>
           <button type="button" onClick={() => window.print()}>
-            Print
+            {t('common.print')}
           </button>
         </div>
-        <section className="print-sheet" aria-label={`${classInfo.name} print sheet`}>
+        <section className="print-sheet" aria-label={t('teacher.printSheetLabel', { className: classInfo.name })}>
           <p className="print-kicker">Techlympics 2026</p>
           <h1>{schoolName}</h1>
           <h2>{classInfo.name}</h2>
@@ -682,8 +690,10 @@ function PrintSheet({
           </div>
           <p className="print-code">{classInfo.joinCode}</p>
           <p className="print-description">
-            Students scan this with their phone camera to open the VibeBlocks app and fill the class code automatically. If the app is not installed,
-            they will be sent to the install guide.
+            {t('teacher.printDescriptionEn')}
+          </p>
+          <p className="print-description">
+            {t('teacher.printDescriptionMs')}
           </p>
         </section>
       </div>
@@ -703,6 +713,7 @@ function ClassWorkspace({
   onClassChanged: () => Promise<void>
 }) {
   const toast = useToast()
+  const t = useT()
   const [participants, setParticipants] = useState<ParticipantDoc[]>([])
   const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([])
   const [includePending, setIncludePending] = useState(true)
@@ -735,13 +746,13 @@ function ClassWorkspace({
   }, [loadClassData])
 
   const setStatus = async (participant: ParticipantDoc, status: ParticipantStatus) => {
-    if (status === 'rejected' && !window.confirm(`Reject ${participant.name}?`)) return
+    if (status === 'rejected' && !window.confirm(t('teacher.rejectConfirm', { name: participant.name }))) return
     setBusyParticipantId(participant.id)
     setError('')
     try {
       await api.setParticipantStatus(participantPath(participant), status)
       await loadClassData()
-      toast(`${participant.name} marked ${statusLabel(status).toLowerCase()}.`, 'success')
+      toast(t('teacher.markedStatus', { name: participant.name, status: statusLabel(status, t).toLowerCase() }), 'success')
     } catch (err) {
       setError(errorText(err))
       toast(errorText(err), 'error')
@@ -757,8 +768,8 @@ function ClassWorkspace({
       const count = await api.bulkApprove(classPath(activeClass.classInfo))
       await loadClassData()
       await onClassChanged()
-      setError(count === 0 ? 'No pending participants.' : '')
-      toast(count === 0 ? 'No pending participants.' : `Approved ${count} participant${count === 1 ? '' : 's'}.`, count === 0 ? 'info' : 'success')
+      setError(count === 0 ? t('teacher.noPending') : '')
+      toast(count === 0 ? t('teacher.noPending') : t('teacher.approvedCount', { count, plural: count === 1 ? '' : 's' }), count === 0 ? 'info' : 'success')
     } catch (err) {
       setError(errorText(err))
       toast(errorText(err), 'error')
@@ -780,26 +791,26 @@ function ClassWorkspace({
           <h2>{activeClass.classInfo.name}</h2>
         </div>
         <div className="workspace-actions">
-          <div className="segmented" role="group" aria-label="Class workspace">
+          <div className="segmented" role="group" aria-label={t('teacher.classWorkspace')}>
             <button type="button" className={mode === 'participants' ? 'active' : ''} onClick={() => onModeChange('participants')}>
-              Participants
+              {t('common.participants')}
             </button>
             <button type="button" className={mode === 'ranking' ? 'active' : ''} onClick={() => onModeChange('ranking')}>
-              Ranking
+              {t('common.ranking')}
             </button>
           </div>
           {mode === 'participants' ? (
             <button type="button" onClick={approveAll} disabled={busyBulk || pendingCount === 0}>
-              {busyBulk ? 'Approving...' : `Approve all (${pendingCount})`}
+              {busyBulk ? t('teacher.approving') : t('teacher.approveAll', { count: pendingCount })}
             </button>
           ) : (
             <button className="secondary" type="button" onClick={() => void loadClassData()} disabled={loadingData}>
-              {loadingData ? 'Refreshing...' : 'Refresh'}
+              {loadingData ? t('common.refreshing') : t('common.refresh')}
             </button>
           )}
         </div>
       </header>
-      {error ? <div className={`notice ${error === 'No pending participants.' ? 'info' : 'error'}`}>{error}</div> : null}
+      {error ? <div className={`notice ${error === t('teacher.noPending') ? 'info' : 'error'}`}>{error}</div> : null}
       {mode === 'participants' ? (
         <div className="workspace-grid">
           <ParticipantsTable participants={participants} busyParticipantId={busyParticipantId} onStatus={setStatus} />
@@ -832,21 +843,22 @@ function ParticipantsTable({
   busyParticipantId: string
   onStatus: (participant: ParticipantDoc, status: ParticipantStatus) => Promise<void>
 }) {
+  const t = useT()
   return (
     <section className="panel table-panel">
       <header className="panel-header">
-        <h3>Participants</h3>
+        <h3>{t('common.participants')}</h3>
         <span>{participants.length}</span>
       </header>
       <div className="table-scroll">
         <table>
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Public ID</th>
-              <th>Registered</th>
-              <th>Status</th>
-              <th>Action</th>
+              <th>{t('common.name')}</th>
+              <th>{t('common.publicId')}</th>
+              <th>{t('common.registered')}</th>
+              <th>{t('common.status')}</th>
+              <th>{t('common.action')}</th>
             </tr>
           </thead>
           <tbody>
@@ -856,7 +868,7 @@ function ParticipantsTable({
                 <td>{participant.publicId}</td>
                 <td>{formatDate(participant.registeredAt)}</td>
                 <td>
-                  <span className={`status ${participant.status}`}>{statusLabel(participant.status)}</span>
+                  <span className={`status ${participant.status}`}>{statusLabel(participant.status, t)}</span>
                 </td>
                 <td>
                   <div className="table-actions">
@@ -866,7 +878,7 @@ function ParticipantsTable({
                       disabled={busyParticipantId === participant.id || participant.status === 'approved'}
                       onClick={() => onStatus(participant, 'approved')}
                     >
-                      Approve
+                      {t('common.approve')}
                     </button>
                     <button
                       className="danger"
@@ -874,7 +886,7 @@ function ParticipantsTable({
                       disabled={busyParticipantId === participant.id || participant.status === 'rejected'}
                       onClick={() => onStatus(participant, 'rejected')}
                     >
-                      Reject
+                      {t('common.reject')}
                     </button>
                   </div>
                 </td>
@@ -888,6 +900,7 @@ function ParticipantsTable({
 }
 
 function RankingSummary({ rows, loading, onOpen }: { rows: LeaderboardRow[]; loading: boolean; onOpen: () => void }) {
+  const t = useT()
   const rankedRows = rows.filter((row) => row.rank !== null).length
   const pendingRows = rows.filter((row) => row.status === 'pending').length
   const visibleRows = rows.filter((row) => row.rank !== null || row.attemptsUsed.c1 + row.attemptsUsed.c2 + row.attemptsUsed.c3 > 0).length
@@ -895,16 +908,16 @@ function RankingSummary({ rows, loading, onOpen }: { rows: LeaderboardRow[]; loa
   return (
     <section className="panel table-panel">
       <header className="panel-header">
-        <h3>Ranking</h3>
-        <span>{loading ? 'Loading' : `${rankedRows} ranked`}</span>
+        <h3>{t('common.ranking')}</h3>
+        <span>{loading ? t('common.loading') : t('teacher.rankedCount', { count: rankedRows })}</span>
       </header>
       <div className="ranking-summary">
         <strong>{visibleRows}</strong>
-        <span>visible participants</span>
+        <span>{t('teacher.visibleParticipants')}</span>
         <strong>{pendingRows}</strong>
-        <span>pending included</span>
+        <span>{t('teacher.pendingIncluded')}</span>
         <button className="secondary" type="button" onClick={onOpen}>
-          Ranking
+          {t('common.ranking')}
         </button>
       </div>
     </section>
@@ -934,26 +947,27 @@ function RankingWorkspace({
   unrankedRows: number
   pendingRows: number
 }) {
+  const t = useT()
+  const metaUnranked = unrankedRows > 0 ? t('teacher.unrankedMeta', { count: unrankedRows }) : ''
+  const metaPending = includePending && pendingRows > 0 ? t('teacher.pendingMeta', { count: pendingRows }) : ''
+  const metaUpdated = lastUpdated ? t('teacher.updatedMeta', { time: lastUpdated }) : ''
   return (
-    <section className="ranking-panel" aria-label="Class ranking">
+    <section className="ranking-panel" aria-label={t('teacher.classWorkspace')}>
       <div className="ranking-toolbar">
-        <div className="segmented" role="group" aria-label="Registration filter">
+        <div className="segmented" role="group" aria-label={t('teacher.registrationFilter')}>
           <button type="button" className={!includePending ? 'active' : ''} onClick={() => onIncludePending(false)}>
-            Registered
+            {t('common.registered')}
           </button>
           <button type="button" className={includePending ? 'active' : ''} onClick={() => onIncludePending(true)}>
-            Include pending
+            {t('teacher.includePending')}
           </button>
         </div>
         <p>
-          {rankedRows} ranked
-          {unrankedRows > 0 ? ` - ${unrankedRows} unranked` : ''}
-          {includePending && pendingRows > 0 ? ` - ${pendingRows} pending` : ''}
-          {lastUpdated ? ` - updated ${lastUpdated}` : ''}
+          {t('teacher.rankingMeta', { ranked: rankedRows, unranked: metaUnranked, pending: metaPending, updated: metaUpdated })}
         </p>
       </div>
       <div className="ranking-table-shell">
-        {loading ? <div className="panel muted">Loading ranking...</div> : null}
+        {loading ? <div className="panel muted">{t('teacher.loadingRanking')}</div> : null}
         <LeaderboardTable rows={rows} challenges={challenges} attemptsPerChallenge={attemptsPerChallenge} />
       </div>
     </section>

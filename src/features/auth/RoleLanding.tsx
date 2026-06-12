@@ -6,6 +6,7 @@ import { signOut } from 'firebase/auth'
 import { api } from '../../api'
 import { normalizeCode } from '../../api/codes'
 import { auth } from '../../lib/firebase'
+import { useT } from '../../lib/i18n'
 import { useToast } from '../../lib/toast'
 import TeacherCodeGate from './TeacherCodeGate'
 
@@ -17,7 +18,7 @@ function errorText(error: unknown): string {
 
 export default function RoleLanding({
   user,
-  title = 'Choose your Techlympics entry',
+  title,
   onRoleChanged,
 }: {
   user: User | null
@@ -26,10 +27,12 @@ export default function RoleLanding({
 }) {
   const navigate = useNavigate()
   const toast = useToast()
+  const t = useT()
   const [panel, setPanel] = useState<LandingPanel>(null)
   const [inviteCode, setInviteCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const displayTitle = title ?? t('auth.chooseEntry')
 
   const redeemInvite = async (event: FormEvent) => {
     event.preventDefault()
@@ -38,7 +41,7 @@ export default function RoleLanding({
     try {
       await api.redeemAdminInvite(normalizeCode(inviteCode))
       await onRoleChanged()
-      toast('Admin invite redeemed.', 'success')
+      toast(t('auth.inviteRedeemed'), 'success')
       navigate('/admin', { replace: true })
     } catch (err) {
       const message = errorText(err)
@@ -55,7 +58,7 @@ export default function RoleLanding({
     try {
       window.__mockRole?.(null)
       await signOut(auth)
-      toast('Signed out.', 'success')
+      toast(t('auth.signedOut'), 'success')
       navigate('/', { replace: true })
     } catch (err) {
       const message = errorText(err)
@@ -67,25 +70,25 @@ export default function RoleLanding({
   }
 
   return (
-    <section className="role-landing" aria-label="Account entry choices">
+    <section className="role-landing" aria-label={t('auth.entryChoices')}>
       <div className="auth-panel-head">
-        <p className="auth-eyebrow">Signed in</p>
-        <h2>{title}</h2>
-        <p>Your account can enter with a teacher code or redeem an admin invite.</p>
+        <p className="auth-eyebrow">{t('auth.signedIn')}</p>
+        <h2>{displayTitle}</h2>
+        <p>{t('auth.roleLandingBody')}</p>
       </div>
 
       <div className="role-choice-grid">
         <button className="role-choice" type="button" onClick={() => { setPanel('teacher'); setError('') }}>
-          <span>Teacher code</span>
-          <strong>Add school</strong>
+          <span>{t('common.teacherCode')}</span>
+          <strong>{t('auth.addSchool')}</strong>
         </button>
         <button className="role-choice" type="button" onClick={() => { setPanel('invite'); setError('') }}>
-          <span>Admin invite</span>
-          <strong>Join host console</strong>
+          <span>{t('common.adminInvite')}</span>
+          <strong>{t('auth.joinHostConsole')}</strong>
         </button>
         <button className="role-choice" type="button" onClick={() => void logout()} disabled={busy}>
-          <span>Account</span>
-          <strong>Sign out</strong>
+          <span>{t('common.account')}</span>
+          <strong>{t('auth.signOut')}</strong>
         </button>
       </div>
 
@@ -103,15 +106,15 @@ export default function RoleLanding({
       {panel === 'invite' ? (
         <form className="auth-panel auth-form" onSubmit={redeemInvite}>
           <label>
-            Admin invite code
+            {t('common.adminInviteCode')}
             <input value={inviteCode} onChange={(event) => setInviteCode(event.target.value.toUpperCase())} placeholder="V-..." />
           </label>
           <div className="auth-actions">
             <button className="auth-button" type="button" onClick={() => setPanel(null)}>
-              Cancel
+              {t('common.cancel')}
             </button>
             <button className="auth-button primary" type="submit" disabled={busy || !inviteCode.trim()}>
-              {busy ? 'Redeeming...' : 'Redeem invite'}
+              {busy ? t('auth.redeeming') : t('auth.redeemInvite')}
             </button>
           </div>
         </form>

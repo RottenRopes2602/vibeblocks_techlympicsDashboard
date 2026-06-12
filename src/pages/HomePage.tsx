@@ -7,6 +7,7 @@ import AuthPanel from '../features/auth/AuthPanel'
 import RoleLanding from '../features/auth/RoleLanding'
 import TeacherCodeGate from '../features/auth/TeacherCodeGate'
 import { useAuthSession } from '../features/auth/session'
+import { LanguageToggle, useT } from '../lib/i18n'
 import '../features/auth/auth.css'
 import styles from '../features/ranking/publicPages.module.css'
 
@@ -14,6 +15,7 @@ type EntryMode = 'teacher' | 'sign-in'
 
 export default function HomePage() {
   const navigate = useNavigate()
+  const t = useT()
   const { user, loading: authLoading, isSignedIn } = useAuthSession()
   const [role, setRole] = useState<RoleDoc | null>(null)
   const [roleLoading, setRoleLoading] = useState(false)
@@ -57,22 +59,23 @@ export default function HomePage() {
         <div className={styles.brandBar}>
           <span className={styles.brandMark}>VB</span>
           <span>VibeBlocks Techlympics</span>
+          <LanguageToggle />
         </div>
         <div className={styles.homeCopy}>
-          <p className={styles.kicker}>FC-1 Competition Platform</p>
-          <h1 id="home-title">Enter Techlympics.</h1>
-          <p>Sign in to continue to your console, or create a teacher account with a teacher code.</p>
+          <p className={styles.kicker}>{t('home.platform')}</p>
+          <h1 id="home-title">{t('home.title')}</h1>
+          <p>{t('home.description')}</p>
         </div>
         <div className="auth-layout">
           <div className="auth-stack">
-            {isSignedIn ? <AuthHeader user={user} role={role} label="Techlympics account" onRefresh={refreshRole} /> : null}
+            {isSignedIn ? <AuthHeader user={user} role={role} label={t('home.accountLabel')} onRefresh={refreshRole} /> : null}
             {!isSignedIn && entryMode === 'sign-in' ? (
-              <AuthPanel title="Sign in" mode="sign-in" onSignedIn={refreshRole} />
+              <AuthPanel title={t('auth.signIn')} mode="sign-in" onSignedIn={refreshRole} />
             ) : null}
 
             {!isSignedIn && entryMode === 'sign-in' ? (
               <button className="auth-button" type="button" onClick={() => { setEntryMode('teacher'); setError(null) }}>
-                Back to teacher code
+                {t('home.backToTeacherCode')}
               </button>
             ) : null}
 
@@ -81,9 +84,9 @@ export default function HomePage() {
                 user={user}
                 entryAside={
                   <>
-                    <span className="home-entry-or">or</span>
+                    <span className="home-entry-or">{t('home.or')}</span>
                     <button className="auth-button" type="button" onClick={() => { setEntryMode('sign-in'); setError(null) }}>
-                      Sign in
+                      {t('auth.signIn')}
                     </button>
                   </>
                 }
@@ -96,8 +99,8 @@ export default function HomePage() {
             {error ? <p className={styles.formError}>{error}</p> : null}
             {isChecking ? (
               <section className="auth-panel">
-                <p className="auth-eyebrow">Session</p>
-                <h2>Checking account...</h2>
+                <p className="auth-eyebrow">{t('home.session')}</p>
+                <h2>{t('home.checkingAccount')}</h2>
               </section>
             ) : null}
             {showRoleLanding ? <RoleLanding user={user} onRoleChanged={refreshRole} /> : null}

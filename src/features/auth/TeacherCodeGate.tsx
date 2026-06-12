@@ -5,6 +5,7 @@ import type { User } from 'firebase/auth'
 import { api } from '../../api'
 import { classifyCode, normalizeCode } from '../../api/codes'
 import type { EventDoc, SchoolDoc } from '../../api/types'
+import { useT } from '../../lib/i18n'
 import { useToast } from '../../lib/toast'
 import AuthPanel from './AuthPanel'
 import { isRealUser } from './session'
@@ -39,6 +40,7 @@ export default function TeacherCodeGate({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const toast = useToast()
+  const t = useT()
 
   const validateCode = async (event: FormEvent) => {
     event.preventDefault()
@@ -50,12 +52,12 @@ export default function TeacherCodeGate({
       if (kind !== 'teacher') {
         const message =
           kind === 'join'
-            ? 'That is a class code. Teacher sign-up requires a teacher code that starts with T-.'
+            ? t('teacher.classCodeError')
             : kind === 'invite'
-              ? 'That is an admin invite. Sign in first, then redeem it from your account entry.'
+              ? t('teacher.inviteCodeError')
               : kind === 'recovery'
-                ? 'Recovery codes are used inside the VibeBlocks app.'
-                : 'Enter a teacher code that starts with T-.'
+                ? t('teacher.recoveryCodeError')
+                : t('teacher.enterTeacherCodeError')
         setError(message)
         toast(message, 'error')
         return
@@ -63,7 +65,7 @@ export default function TeacherCodeGate({
       const result = await api.validateTeacherCode(normalized)
       setValidated({ code: normalized, ...result })
       setStep('confirm')
-      toast('Teacher code confirmed.', 'success')
+      toast(t('teacher.teacherCodeConfirmed'), 'success')
     } catch (err) {
       const message = errorText(err)
       setError(message)
@@ -86,7 +88,7 @@ export default function TeacherCodeGate({
     try {
       await api.bindTeacherSchool(validated.code)
       await onBound()
-      toast('Teacher access added.', 'success')
+      toast(t('teacher.accessAdded'), 'success')
       setCode('')
       setValidated(null)
       setStep('code')
@@ -101,12 +103,12 @@ export default function TeacherCodeGate({
   }
 
   return (
-    <section className="auth-panel" aria-label="Teacher code gate">
+    <section className="auth-panel" aria-label={t('teacher.teacherCodeGate')}>
       {entryAside && step === 'code' ? null : (
-        <div className="auth-steps" aria-label="Teacher onboarding progress">
-          <span className={step === 'code' ? 'active' : ''}>Code</span>
-          <span className={step === 'confirm' ? 'active' : ''}>Confirm</span>
-          <span className={step === 'auth' ? 'active' : ''}>Account</span>
+        <div className="auth-steps" aria-label={t('teacher.onboardingProgress')}>
+          <span className={step === 'code' ? 'active' : ''}>{t('teacher.codeStep')}</span>
+          <span className={step === 'confirm' ? 'active' : ''}>{t('teacher.confirmStep')}</span>
+          <span className={step === 'auth' ? 'active' : ''}>{t('common.account')}</span>
         </div>
       )}
 
@@ -115,40 +117,40 @@ export default function TeacherCodeGate({
           {entryAside ? (
             <div className="home-entry-row">
               <label className="home-entry-field">
-                Teacher code
+                {t('common.teacherCode')}
                 <input
                   autoFocus
                   value={code}
                   onChange={(event) => setCode(event.target.value.toUpperCase())}
-                  placeholder="T-KEDAH234"
+                  placeholder={t('teacher.teacherCodePlaceholder')}
                   autoComplete="one-time-code"
                 />
               </label>
               <button className="auth-button primary" type="submit" disabled={busy || code.trim().length === 0}>
-                {busy ? 'Checking...' : 'Check'}
+                {busy ? t('teacher.checking') : t('teacher.check')}
               </button>
               {entryAside}
             </div>
           ) : (
             <>
               <label>
-                Teacher code
+                {t('common.teacherCode')}
                 <input
                   autoFocus
                   value={code}
                   onChange={(event) => setCode(event.target.value.toUpperCase())}
-                  placeholder="T-KEDAH234"
+                  placeholder={t('teacher.teacherCodePlaceholder')}
                   autoComplete="one-time-code"
                 />
               </label>
               <div className="auth-actions">
                 {onCancel ? (
                   <button className="auth-button" type="button" onClick={onCancel}>
-                    Cancel
+                    {t('common.cancel')}
                   </button>
                 ) : null}
                 <button className="auth-button primary" type="submit" disabled={busy || code.trim().length === 0}>
-                  {busy ? 'Checking...' : 'Continue'}
+                  {busy ? t('teacher.checking') : t('teacher.continue')}
                 </button>
               </div>
             </>
@@ -160,18 +162,18 @@ export default function TeacherCodeGate({
         <div className="auth-confirm">
           <p className="auth-eyebrow">{validated.event.name}</p>
           <h2>{validated.school.name}</h2>
-          <p>Confirm this teacher code before adding access to your account.</p>
+          <p>{t('teacher.confirmTeacherCode')}</p>
           <div className="auth-actions">
             <button className="auth-button" type="button" onClick={() => setStep('code')} disabled={busy}>
-              Change code
+              {t('teacher.changeCode')}
             </button>
             {isRealUser(user) ? (
               <button className="auth-button primary" type="button" onClick={() => void bindValidatedSchool()} disabled={busy}>
-                {busy ? 'Adding...' : 'Add school'}
+                {busy ? t('teacher.adding') : t('auth.addSchool')}
               </button>
             ) : (
               <button className="auth-button primary" type="button" onClick={() => setStep('auth')} disabled={busy}>
-                Create teacher account
+                {t('auth.createTeacherAccount')}
               </button>
             )}
           </div>
@@ -180,7 +182,7 @@ export default function TeacherCodeGate({
 
       {step === 'auth' ? (
         <AuthPanel
-          title="Create teacher account"
+          title={t('auth.createTeacherAccount')}
           mode="sign-up"
           onSignedIn={() => bindValidatedSchool({ bubbleError: true, notifyError: false })}
         />

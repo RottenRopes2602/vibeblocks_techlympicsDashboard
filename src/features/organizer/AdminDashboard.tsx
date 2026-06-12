@@ -15,6 +15,8 @@ import type {
   TeacherBinding,
 } from '../../api/types'
 import { ShimmerText } from '../../lib/Shimmer'
+import type { TFunction } from '../../lib/i18n'
+import { useT } from '../../lib/i18n'
 import { useToast } from '../../lib/toast'
 import { sampleImportRows } from './fixtures/sampleImportRows'
 import './admin.css'
@@ -54,10 +56,10 @@ interface EventForm {
 const requiredFields: ImportField[] = ['schoolName']
 const importFields: ImportField[] = ['schoolName', 'state', 'zone']
 
-const fieldLabels: Record<ImportField, string> = {
-  schoolName: 'School name',
-  state: 'State',
-  zone: 'Zone',
+function fieldLabel(field: ImportField, t: TFunction): string {
+  if (field === 'schoolName') return t('common.schoolName')
+  if (field === 'state') return t('common.state')
+  return t('common.zone')
 }
 
 const fallbackChallenges: ChallengeDef[] = [
@@ -115,7 +117,7 @@ function pickInitialMapping(headers: string[]): Record<ImportField, string> {
   }
 }
 
-function buildPreview(rows: string[][], mapping: Record<ImportField, string>, selected: Set<number>): PreviewRow[] {
+function buildPreview(rows: string[][], mapping: Record<ImportField, string>, selected: Set<number>, t: TFunction): PreviewRow[] {
   const headers = rows[0] ?? []
   const body = rows.slice(1).filter((row) => row.some((cell) => normalizedCell(cell)))
   const seen = new Map<string, number>()
@@ -128,12 +130,12 @@ function buildPreview(rows: string[][], mapping: Record<ImportField, string>, se
     }
     const warnings: string[] = []
     requiredFields.forEach((field) => {
-      if (!mapped[field]?.trim()) warnings.push(`${fieldLabels[field]} empty`)
+      if (!mapped[field]?.trim()) warnings.push(t('admin.fieldEmpty', { field: fieldLabel(field, t) }))
     })
     const dupKey = mapped.schoolName.toLowerCase()
     if (mapped.schoolName) {
       const first = seen.get(dupKey)
-      if (first !== undefined) warnings.push(`Duplicate of row ${first + 2}`)
+      if (first !== undefined) warnings.push(t('admin.duplicateRow', { row: first + 2 }))
       else seen.set(dupKey, bodyIndex)
     }
     return {
@@ -196,19 +198,19 @@ function totalAttempts(row: LeaderboardRow) {
   return row.attemptsUsed.c1 + row.attemptsUsed.c2 + row.attemptsUsed.c3
 }
 
-function statusLabel(status: LeaderboardRow['status']) {
-  if (status === 'approved') return 'Registered'
-  if (status === 'pending') return 'Pending'
-  if (status === 'withdrawn') return 'Withdrawn'
-  return 'Rejected'
+function statusLabel(status: LeaderboardRow['status'], t: TFunction) {
+  if (status === 'approved') return t('common.registered')
+  if (status === 'pending') return t('common.pending')
+  if (status === 'withdrawn') return t('common.withdrawn')
+  return t('common.rejected')
 }
 
 function challengeShortLabel(slot: ChallengeSlot) {
   return slot.toUpperCase()
 }
 
-function attemptLimitText(limit: number | null) {
-  return limit === null ? 'Unlimited' : String(limit)
+function attemptLimitText(limit: number | null, t: TFunction) {
+  return limit === null ? t('common.unlimited') : String(limit)
 }
 
 function gradeFromClassName(className: string) {
@@ -217,6 +219,7 @@ function gradeFromClassName(className: string) {
 
 export default function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   const toast = useToast()
+  const t = useT()
   const [tab, setTab] = useState<AdminTab>('events')
   const [events, setEvents] = useState<EventDoc[]>([])
   const [selectedEventId, setSelectedEventId] = useState('')
@@ -261,12 +264,12 @@ export default function AdminDashboard({ embedded = false }: { embedded?: boolea
     <section className={embedded ? 'ops-workspace embedded' : 'ops-workspace'}>
       <div className="ops-topbar">
         <div>
-          <p className="ops-eyebrow">Techlympics admin</p>
-          <h1>Admin Console</h1>
-          <p className="ops-subtle">Manage events, school imports, teacher codes, and class rankings.</p>
+          <p className="ops-eyebrow">{t('admin.techlympicsAdmin')}</p>
+          <h1>{t('admin.console')}</h1>
+          <p className="ops-subtle">{t('admin.description')}</p>
         </div>
         <button className="ops-button" disabled={refreshing} onClick={() => void refresh()}>
-          {refreshing ? 'Refreshing...' : 'Refresh'}
+          {refreshing ? t('common.refreshing') : t('common.refresh')}
         </button>
       </div>
 
@@ -275,8 +278,8 @@ export default function AdminDashboard({ embedded = false }: { embedded?: boolea
       <div className="ops-grid">
         <aside className="ops-panel">
           <div className="ops-topbar compact">
-            <h2>Events</h2>
-            <button className="ops-button primary" onClick={() => setCreateOpen(true)}>New</button>
+            <h2>{t('admin.events')}</h2>
+            <button className="ops-button primary" onClick={() => setCreateOpen(true)}>{t('admin.new')}</button>
           </div>
           <div className="ops-event-list">
             {events.map((event) => (
@@ -289,7 +292,7 @@ export default function AdminDashboard({ embedded = false }: { embedded?: boolea
                 <br />
                 <span className="ops-subtle">{toDateTimeLocal(event.startsAt)} - {toDateTimeLocal(event.endsAt)}</span>
                 <br />
-                <span className={`ops-pill ${event.frozen ? 'warn' : 'ok'}`}>{event.frozen ? 'Frozen' : 'Open'}</span>
+                <span className={`ops-pill ${event.frozen ? 'warn' : 'ok'}`}>{event.frozen ? t('common.frozen') : t('common.open')}</span>
               </button>
             ))}
           </div>
@@ -299,15 +302,15 @@ export default function AdminDashboard({ embedded = false }: { embedded?: boolea
           <div className="ops-panel">
             <div className="ops-topbar">
               <div>
-                <h2>{selectedEvent?.name ?? 'No event selected'}</h2>
-                <p className="ops-subtle">Students can submit only during the event period. Frozen events block submissions immediately.</p>
+                <h2>{selectedEvent?.name ?? t('admin.noEventSelected')}</h2>
+                <p className="ops-subtle">{t('admin.eventPeriodNote')}</p>
               </div>
-              {selectedEvent && <span className={`ops-pill ${selectedEvent.frozen ? 'warn' : 'ok'}`}>{selectedEvent.frozen ? 'Frozen' : 'Open'}</span>}
+              {selectedEvent && <span className={`ops-pill ${selectedEvent.frozen ? 'warn' : 'ok'}`}>{selectedEvent.frozen ? t('common.frozen') : t('common.open')}</span>}
             </div>
             <div className="ops-tabs">
               {(['events', 'import', 'schools', 'participants'] as AdminTab[]).map((item) => (
                 <button className={`ops-tab ${tab === item ? 'active' : ''}`} key={item} onClick={() => setTab(item)}>
-                  {item === 'events' ? 'Event setup' : item === 'import' ? 'Import' : item === 'schools' ? 'Schools' : 'Participants'}
+                  {item === 'events' ? t('admin.eventSetup') : item === 'import' ? t('admin.import') : item === 'schools' ? t('common.schools') : t('common.participants')}
                 </button>
               ))}
             </div>
@@ -353,7 +356,7 @@ export default function AdminDashboard({ embedded = false }: { embedded?: boolea
           onClose={() => setCreateOpen(false)}
           onCreated={async (created) => {
             setCreateOpen(false)
-            toast(`Event created: ${created.name}`, 'success')
+            toast(t('admin.eventCreated', { name: created.name }), 'success')
             await refresh(created.id)
           }}
         />
@@ -363,23 +366,25 @@ export default function AdminDashboard({ embedded = false }: { embedded?: boolea
 }
 
 function StatsPanel({ stats }: { stats: EventStats }) {
+  const t = useT()
   return (
     <section className="ops-panel">
       <div className="ops-stat-grid">
-        <div className="ops-stat"><span className="ops-subtle">Schools</span><strong>{stats.schoolCount}</strong></div>
-        <div className="ops-stat"><span className="ops-subtle">Classes</span><strong>{stats.classCount}</strong></div>
-        <div className="ops-stat"><span className="ops-subtle">Participants</span><strong>{stats.participantCount}</strong></div>
-        <div className="ops-stat"><span className="ops-subtle">Submissions</span><strong>{stats.attemptCount}</strong></div>
+        <div className="ops-stat"><span className="ops-subtle">{t('common.schools')}</span><strong>{stats.schoolCount}</strong></div>
+        <div className="ops-stat"><span className="ops-subtle">{t('common.classes')}</span><strong>{stats.classCount}</strong></div>
+        <div className="ops-stat"><span className="ops-subtle">{t('common.participants')}</span><strong>{stats.participantCount}</strong></div>
+        <div className="ops-stat"><span className="ops-subtle">{t('common.submissions')}</span><strong>{stats.attemptCount}</strong></div>
       </div>
     </section>
   )
 }
 
 function AttemptsControl({ form, onChange }: { form: EventForm; onChange: (next: EventForm) => void }) {
+  const t = useT()
   const unlimited = form.attemptsPerChallenge === null
   return (
     <div className="ops-label">
-      <span>Attempts per challenge</span>
+      <span>{t('common.attempts')}</span>
       <div className="ops-inline-control">
         <input
           className="ops-input"
@@ -395,7 +400,7 @@ function AttemptsControl({ form, onChange }: { form: EventForm; onChange: (next:
             type="checkbox"
             onChange={(event) => onChange({ ...form, attemptsPerChallenge: event.target.checked ? null : 3 })}
           />
-          Unlimited
+          {t('common.unlimited')}
         </label>
       </div>
     </div>
@@ -404,6 +409,7 @@ function AttemptsControl({ form, onChange }: { form: EventForm; onChange: (next:
 
 function EventEditor({ event, onSaved }: { event: EventDoc; onSaved: (message: string) => Promise<void> }) {
   const toast = useToast()
+  const t = useT()
   const [form, setForm] = useState<EventForm>(() => eventToForm(event))
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -424,7 +430,7 @@ function EventEditor({ event, onSaved }: { event: EventDoc; onSaved: (message: s
         endsAt: fromDateTimeLocal(form.endsAt),
         attemptsPerChallenge: form.attemptsPerChallenge,
       })
-      await onSaved('Event updated.')
+      await onSaved(t('admin.eventUpdated'))
     } catch (err) {
       const message = getErrorMessage(err)
       setError(message)
@@ -436,13 +442,13 @@ function EventEditor({ event, onSaved }: { event: EventDoc; onSaved: (message: s
 
   const toggleFrozen = async () => {
     const next = !event.frozen
-    const ok = window.confirm(next ? 'Freeze this event and block new submissions?' : 'Unfreeze this event and allow submissions again?')
+    const ok = window.confirm(next ? t('admin.freezeConfirm') : t('admin.unfreezeConfirm'))
     if (!ok) return
     setFreezing(true)
     setError('')
     try {
       await api.updateEvent(event.id, { frozen: next })
-      await onSaved(next ? 'Event frozen.' : 'Event unfrozen.')
+      await onSaved(next ? t('admin.eventFrozen') : t('admin.eventUnfrozen'))
     } catch (err) {
       const message = getErrorMessage(err)
       setError(message)
@@ -456,23 +462,23 @@ function EventEditor({ event, onSaved }: { event: EventDoc; onSaved: (message: s
     <section className="ops-panel">
       <div className="ops-topbar">
         <div>
-          <h2>Event management</h2>
-          <p className="ops-subtle">New events are created from the New button. This form edits the selected event.</p>
+          <h2>{t('admin.eventManagement')}</h2>
+          <p className="ops-subtle">{t('admin.eventManagementNote')}</p>
         </div>
         <button className={`ops-button ${event.frozen ? '' : 'danger'}`} disabled={freezing} onClick={() => void toggleFrozen()}>
-          {freezing ? 'Saving...' : event.frozen ? 'Unfreeze' : 'Freeze'}
+          {freezing ? t('common.saving') : event.frozen ? t('admin.unfreeze') : t('admin.freeze')}
         </button>
       </div>
       {error && <div className="ops-alert">{error}</div>}
       <div className="ops-form two">
-        <label className="ops-label">Name<input className="ops-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+        <label className="ops-label">{t('common.name')}<input className="ops-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
         <AttemptsControl form={form} onChange={setForm} />
-        <label className="ops-label">Starts at<input className="ops-input" type="datetime-local" value={form.startsAt} onChange={(e) => setForm({ ...form, startsAt: e.target.value })} /></label>
-        <label className="ops-label">Ends at<input className="ops-input" type="datetime-local" value={form.endsAt} onChange={(e) => setForm({ ...form, endsAt: e.target.value })} /></label>
+        <label className="ops-label">{t('common.startsAt')}<input className="ops-input" type="datetime-local" value={form.startsAt} onChange={(e) => setForm({ ...form, startsAt: e.target.value })} /></label>
+        <label className="ops-label">{t('common.endsAt')}<input className="ops-input" type="datetime-local" value={form.endsAt} onChange={(e) => setForm({ ...form, endsAt: e.target.value })} /></label>
       </div>
       <div className="ops-row-actions" style={{ marginTop: 12 }}>
         <button className="ops-button primary" onClick={() => void save()} disabled={saving || !form.name.trim()}>
-          {saving ? 'Saving...' : 'Save changes'}
+          {saving ? t('common.saving') : t('admin.saveChanges')}
         </button>
       </div>
     </section>
@@ -481,6 +487,7 @@ function EventEditor({ event, onSaved }: { event: EventDoc; onSaved: (message: s
 
 function EventCreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (event: EventDoc) => Promise<void> }) {
   const toast = useToast()
+  const t = useT()
   const [form, setForm] = useState<EventForm>(blankEvent)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -510,21 +517,21 @@ function EventCreateModal({ onClose, onCreated }: { onClose: () => void; onCreat
       <section aria-modal="true" className="ops-modal" role="dialog">
         <div className="ops-topbar">
           <div>
-            <p className="ops-eyebrow">New event</p>
-            <h2>Create event</h2>
+            <p className="ops-eyebrow">{t('admin.newEvent')}</p>
+            <h2>{t('admin.createEvent')}</h2>
           </div>
-          <button className="ops-button" disabled={saving} onClick={onClose}>Close</button>
+          <button className="ops-button" disabled={saving} onClick={onClose}>{t('common.close')}</button>
         </div>
         {error && <div className="ops-alert">{error}</div>}
         <div className="ops-form two">
-          <label className="ops-label">Name<input className="ops-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+          <label className="ops-label">{t('common.name')}<input className="ops-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
           <AttemptsControl form={form} onChange={setForm} />
-          <label className="ops-label">Starts at<input className="ops-input" type="datetime-local" value={form.startsAt} onChange={(e) => setForm({ ...form, startsAt: e.target.value })} /></label>
-          <label className="ops-label">Ends at<input className="ops-input" type="datetime-local" value={form.endsAt} onChange={(e) => setForm({ ...form, endsAt: e.target.value })} /></label>
+          <label className="ops-label">{t('common.startsAt')}<input className="ops-input" type="datetime-local" value={form.startsAt} onChange={(e) => setForm({ ...form, startsAt: e.target.value })} /></label>
+          <label className="ops-label">{t('common.endsAt')}<input className="ops-input" type="datetime-local" value={form.endsAt} onChange={(e) => setForm({ ...form, endsAt: e.target.value })} /></label>
         </div>
         <div className="ops-row-actions" style={{ marginTop: 12 }}>
           <button className="ops-button primary" disabled={saving || !form.name.trim()} onClick={() => void create()}>
-            {saving ? 'Creating...' : 'Create event'}
+            {saving ? t('admin.creating') : t('admin.createEvent')}
           </button>
         </div>
       </section>
@@ -540,6 +547,7 @@ function ImportPanel({
   onImported: (message: string) => Promise<void>
 }) {
   const toast = useToast()
+  const t = useT()
   const [schoolForm, setSchoolForm] = useState({ schoolName: '', state: '', zone: '' })
   const [workbook, setWorkbook] = useState<ParsedWorkbook | null>(null)
   const [mapping, setMapping] = useState<Record<ImportField, string>>({ schoolName: '', state: '', zone: '' })
@@ -552,7 +560,7 @@ function ImportPanel({
 
   const rows = workbook ? workbook.sheets[workbook.sheetName] ?? [] : []
   const headers = rows[0] ?? []
-  const preview = useMemo(() => buildPreview(rows, mapping, selected), [rows, mapping, selected])
+  const preview = useMemo(() => buildPreview(rows, mapping, selected, t), [rows, mapping, selected, t])
   const importable = preview.filter((row) => row.selected)
 
   const loadFile = async (file: File | undefined) => {
@@ -583,7 +591,7 @@ function ImportPanel({
         zone: schoolForm.zone.trim() || undefined,
       }])
       setSchoolForm({ schoolName: '', state: '', zone: '' })
-      await onImported(`School import finished: ${response.schools.length} school, ${response.skipped.length} skipped.`)
+      await onImported(t('admin.schoolImportFinished', { schools: response.schools.length, skipped: response.skipped.length }))
     } catch (err) {
       const message = getErrorMessage(err)
       setError(message)
@@ -600,7 +608,7 @@ function ImportPanel({
       const response = await api.importSchools(event.id, importable.map((row) => row.mapped))
       setResult(response)
       setResultRows(importable)
-      await onImported(`Import finished: ${response.schools.length} schools touched, ${response.skipped.length} skipped.`)
+      await onImported(t('admin.importFinished', { schools: response.schools.length, skipped: response.skipped.length }))
     } catch (err) {
       const message = getErrorMessage(err)
       setError(message)
@@ -619,19 +627,19 @@ function ImportPanel({
     <section className="ops-panel">
       <div className="ops-topbar">
         <div>
-          <h2>Import</h2>
-          <p className="ops-subtle">Add schools one by one or upload a workbook. Add classes from each school row in Schools.</p>
+          <h2>{t('admin.import')}</h2>
+          <p className="ops-subtle">{t('admin.importDescription')}</p>
         </div>
-        <button className="ops-button" onClick={downloadSampleWorkbook}>Download sample xlsx</button>
+        <button className="ops-button" onClick={downloadSampleWorkbook}>{t('admin.downloadSample')}</button>
       </div>
       {error && <div className="ops-alert">{error}</div>}
 
       <section className="ops-subsection">
-        <h3>Add school</h3>
+        <h3>{t('admin.addSchool')}</h3>
         <div className="ops-form three">
-          <label className="ops-label">School name<input className="ops-input" value={schoolForm.schoolName} onChange={(e) => setSchoolForm({ ...schoolForm, schoolName: e.target.value })} /></label>
-          <label className="ops-label">State<input className="ops-input" value={schoolForm.state} onChange={(e) => setSchoolForm({ ...schoolForm, state: e.target.value })} /></label>
-          <label className="ops-label">Zone<input className="ops-input" value={schoolForm.zone} onChange={(e) => setSchoolForm({ ...schoolForm, zone: e.target.value })} /></label>
+          <label className="ops-label">{t('common.schoolName')}<input className="ops-input" value={schoolForm.schoolName} onChange={(e) => setSchoolForm({ ...schoolForm, schoolName: e.target.value })} /></label>
+          <label className="ops-label">{t('common.state')}<input className="ops-input" value={schoolForm.state} onChange={(e) => setSchoolForm({ ...schoolForm, state: e.target.value })} /></label>
+          <label className="ops-label">{t('common.zone')}<input className="ops-input" value={schoolForm.zone} onChange={(e) => setSchoolForm({ ...schoolForm, zone: e.target.value })} /></label>
         </div>
         <div className="ops-row-actions" style={{ marginTop: 12 }}>
           <button
@@ -639,17 +647,17 @@ function ImportPanel({
             disabled={schoolBusy || !schoolForm.schoolName.trim()}
             onClick={() => void addSchool()}
           >
-            {schoolBusy ? 'Adding...' : 'Add school'}
+            {schoolBusy ? t('teacher.adding') : t('admin.addSchool')}
           </button>
         </div>
       </section>
 
       <section className="ops-subsection">
-        <h3>Workbook import</h3>
+        <h3>{t('admin.workbookImport')}</h3>
         <div className="ops-form two">
-          <label className="ops-label">Upload xlsx/csv<input className="ops-file" type="file" accept=".xlsx,.xls,.csv" onChange={(e) => void loadFile(e.target.files?.[0])} /></label>
+          <label className="ops-label">{t('admin.uploadWorkbook')}<input className="ops-file" type="file" accept=".xlsx,.xls,.csv" onChange={(e) => void loadFile(e.target.files?.[0])} /></label>
           {workbook && (
-            <label className="ops-label">Sheet
+            <label className="ops-label">{t('admin.sheet')}
               <select className="ops-select" value={workbook.sheetName} onChange={(e) => setWorkbook({ ...workbook, sheetName: e.target.value })}>
                 {Object.keys(workbook.sheets).map((sheet) => <option key={sheet} value={sheet}>{sheet}</option>)}
               </select>
@@ -660,12 +668,12 @@ function ImportPanel({
         {workbook && (
           <>
             <div className="ops-mapping-box" style={{ marginTop: 12 }}>
-              <h3>Column mapping</h3>
+              <h3>{t('admin.columnMapping')}</h3>
               <div className="ops-form two" style={{ marginTop: 10 }}>
                 {importFields.map((field) => (
-                  <label className="ops-label" key={field}>{fieldLabels[field]}
+                  <label className="ops-label" key={field}>{fieldLabel(field, t)}
                     <select className="ops-select" value={mapping[field]} onChange={(e) => setMapping({ ...mapping, [field]: e.target.value })}>
-                      <option value="">Not mapped</option>
+                      <option value="">{t('common.notMapped')}</option>
                       {headers.map((header) => <option key={header} value={header}>{header}</option>)}
                     </select>
                   </label>
@@ -677,11 +685,11 @@ function ImportPanel({
               <table className="ops-table">
                 <thead>
                   <tr>
-                    <th>Select</th>
-                    <th>School</th>
-                    <th>State</th>
-                    <th>Zone</th>
-                    <th>Validation</th>
+                    <th>{t('common.select')}</th>
+                    <th>{t('common.school')}</th>
+                    <th>{t('common.state')}</th>
+                    <th>{t('common.zone')}</th>
+                    <th>{t('common.validation')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -696,7 +704,7 @@ function ImportPanel({
                       <td>{row.mapped.schoolName}</td>
                       <td>{row.mapped.state}</td>
                       <td>{row.mapped.zone}</td>
-                      <td>{row.warnings.length ? row.warnings.map((warning) => <span className="ops-pill warn" key={warning}>{warning}</span>) : <span className="ops-pill ok">Ready</span>}</td>
+                      <td>{row.warnings.length ? row.warnings.map((warning) => <span className="ops-pill warn" key={warning}>{warning}</span>) : <span className="ops-pill ok">{t('common.ready')}</span>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -705,9 +713,9 @@ function ImportPanel({
 
             <div className="ops-row-actions" style={{ marginTop: 12 }}>
               <button className="ops-button primary" disabled={workbookBusy || importable.length === 0} onClick={() => void importSelected()}>
-                {workbookBusy ? 'Importing...' : 'Import selected rows'}
+                {workbookBusy ? t('admin.importing') : t('admin.importSelected')}
               </button>
-              <span className="ops-subtle">{importable.length} rows selected</span>
+              <span className="ops-subtle">{t('admin.rowsSelected', { count: importable.length })}</span>
             </div>
           </>
         )}
@@ -715,9 +723,9 @@ function ImportPanel({
 
       {result && (
         <div className="ops-alert ops-success" style={{ marginTop: 12 }}>
-          Touched {result.schools.length} schools. Skipped {result.skipped.length}.
+          {t('admin.resultTouched', { schools: result.schools.length, skipped: result.skipped.length })}
           <div className="ops-row-actions" style={{ marginTop: 8 }}>
-            <button className="ops-button" onClick={() => void downloadResult()}>Download result xlsx with teacher codes</button>
+            <button className="ops-button" onClick={() => void downloadResult()}>{t('admin.downloadResult')}</button>
           </div>
         </div>
       )}
@@ -727,6 +735,7 @@ function ImportPanel({
 
 function ParticipantsPanel({ event, schools }: { event: EventDoc; schools: AdminSchoolView[] }) {
   const toast = useToast()
+  const t = useT()
   const [rows, setRows] = useState<ParticipantRow[]>([])
   const [schoolFilter, setSchoolFilter] = useState('all')
   const [gradeFilter, setGradeFilter] = useState('all')
@@ -786,28 +795,28 @@ function ParticipantsPanel({ event, schools }: { event: EventDoc; schools: Admin
     <section className="ops-panel">
       <div className="ops-topbar">
         <div>
-          <h2>Participants</h2>
-          <p className="ops-subtle">Filter all registered students by school, grade, or name.</p>
+          <h2>{t('common.participants')}</h2>
+          <p className="ops-subtle">{t('admin.participantsDescription')}</p>
         </div>
         <button className="ops-button" disabled={loading} onClick={() => void loadParticipants()}>
-          {loading ? 'Loading...' : 'Refresh'}
+          {loading ? t('common.loading') : t('common.refresh')}
         </button>
       </div>
       {error && <div className="ops-alert">{error}</div>}
       <div className="ops-filter-bar participants">
-        <label className="ops-label">School
+        <label className="ops-label">{t('common.school')}
           <select className="ops-select" value={schoolFilter} onChange={(event) => setSchoolFilter(event.target.value)}>
-            <option value="all">All schools</option>
+            <option value="all">{t('admin.allSchools')}</option>
             {schools.map((school) => <option key={school.school.id} value={school.school.id}>{school.school.name}</option>)}
           </select>
         </label>
-        <label className="ops-label">Grade
+        <label className="ops-label">{t('common.grade')}
           <select className="ops-select" value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)}>
-            <option value="all">All grades</option>
-            {grades.map((grade) => <option key={grade} value={grade}>Grade {grade}</option>)}
+            <option value="all">{t('admin.allGrades')}</option>
+            {grades.map((grade) => <option key={grade} value={grade}>{t('teacher.gradeLabel', { grade })}</option>)}
           </select>
         </label>
-        <label className="ops-label">Search
+        <label className="ops-label">{t('common.search')}
           <input className="ops-input" value={query} onChange={(event) => setQuery(event.target.value)} />
         </label>
       </div>
@@ -815,12 +824,12 @@ function ParticipantsPanel({ event, schools }: { event: EventDoc; schools: Admin
         <table className="ops-table">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Public ID</th>
-              <th>School</th>
-              <th>Class</th>
-              <th>Status</th>
-              <th>Registered</th>
+              <th>{t('common.name')}</th>
+              <th>{t('common.publicId')}</th>
+              <th>{t('common.school')}</th>
+              <th>{t('common.class')}</th>
+              <th>{t('common.status')}</th>
+              <th>{t('common.registered')}</th>
             </tr>
           </thead>
           <tbody>
@@ -830,15 +839,15 @@ function ParticipantsPanel({ event, schools }: { event: EventDoc; schools: Admin
                 <td><code>{row.participant.publicId}</code></td>
                 <td>{row.school.name}</td>
                 <td>{row.classInfo.name}</td>
-                <td><span className={`ops-pill ${row.participant.status === 'approved' ? 'ok' : row.participant.status === 'pending' ? '' : 'warn'}`}>{statusLabel(row.participant.status)}</span></td>
+                <td><span className={`ops-pill ${row.participant.status === 'approved' ? 'ok' : row.participant.status === 'pending' ? '' : 'warn'}`}>{statusLabel(row.participant.status, t)}</span></td>
                 <td>{formatDateTime(row.participant.registeredAt)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      {loading && <p className="ops-subtle"><ShimmerText busy={loading}>Loading participants</ShimmerText></p>}
-      {!loading && filteredRows.length === 0 && <p className="ops-subtle">No participants match the filter.</p>}
+      {loading && <p className="ops-subtle"><ShimmerText busy={loading}>{t('admin.loadingParticipants')}</ShimmerText></p>}
+      {!loading && filteredRows.length === 0 && <p className="ops-subtle">{t('admin.noParticipantsMatch')}</p>}
     </section>
   )
 }
@@ -853,6 +862,7 @@ function SchoolsPanel({
   onChanged: (message: string) => Promise<void>
 }) {
   const toast = useToast()
+  const t = useT()
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [expandedClasses, setExpandedClasses] = useState<Set<string>>(new Set())
@@ -905,17 +915,17 @@ function SchoolsPanel({
 
   const copyTeacherCode = async (code: string) => {
     await navigator.clipboard.writeText(code)
-    toast('Teacher code copied.', 'success')
+    toast(t('admin.teacherCodeCopied'), 'success')
   }
 
   const resetCode = async (schoolId: string) => {
-    const ok = window.confirm('Reset this school teacher code? The previous code will stop working for new teacher binding.')
+    const ok = window.confirm(t('admin.resetTeacherCodeConfirm'))
     if (!ok) return
     setBusySchoolId(schoolId)
     setError('')
     try {
       await api.resetTeacherCode({ eventId: event.id, schoolId })
-      await onChanged('Teacher code reset.')
+      await onChanged(t('admin.teacherCodeReset'))
     } catch (err) {
       const message = getErrorMessage(err)
       setError(message)
@@ -933,7 +943,7 @@ function SchoolsPanel({
     try {
       const created = await api.addClass({ eventId: event.id, schoolId }, name)
       setClassDrafts((current) => ({ ...current, [schoolId]: '' }))
-      await onChanged(`Class added: ${created.name}.`)
+      await onChanged(t('teacher.classAdded', { className: created.name }))
     } catch (err) {
       const message = getErrorMessage(err)
       setError(message)
@@ -945,14 +955,14 @@ function SchoolsPanel({
 
   const revokeTeacher = async (schoolId: string, teacher: TeacherBinding) => {
     const label = teacher.email || teacher.uid
-    const ok = window.confirm(`Revoke teacher binding for ${label}?`)
+    const ok = window.confirm(t('admin.revokeTeacherConfirm', { label }))
     if (!ok) return
     const key = `${schoolId}:${teacher.uid}`
     setRevokingTeacherKey(key)
     setError('')
     try {
       await api.revokeTeacherBinding({ eventId: event.id, schoolId }, teacher.uid)
-      toast('Teacher binding revoked.', 'success')
+      toast(t('admin.teacherBindingRevoked'), 'success')
       await loadTeachers(schoolId)
     } catch (err) {
       const message = getErrorMessage(err)
@@ -1015,23 +1025,23 @@ function SchoolsPanel({
     <section className="ops-panel">
       <div className="ops-topbar">
         <div>
-          <h2>Schools</h2>
-          <p className="ops-subtle">Search by school name or state. Expand a school to add classes, inspect teachers, and view rankings.</p>
+          <h2>{t('common.schools')}</h2>
+          <p className="ops-subtle">{t('admin.schoolsDescription')}</p>
         </div>
-        <label className="ops-search">Search<input className="ops-input" value={query} onChange={(e) => setQuery(e.target.value)} /></label>
+        <label className="ops-search">{t('common.search')}<input className="ops-input" value={query} onChange={(e) => setQuery(e.target.value)} /></label>
       </div>
       {error && <div className="ops-alert">{error}</div>}
       <div className="ops-table-wrap">
         <table className="ops-table">
           <thead>
             <tr>
-              <th aria-label="Expand"></th>
-              <th>School</th>
-              <th>State</th>
-              <th>Teacher code</th>
-              <th>Classes</th>
-              <th>Participants</th>
-              <th>Actions</th>
+              <th aria-label={t('admin.expand')}></th>
+              <th>{t('common.school')}</th>
+              <th>{t('common.state')}</th>
+              <th>{t('common.teacherCode')}</th>
+              <th>{t('common.classes')}</th>
+              <th>{t('common.participants')}</th>
+              <th>{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -1044,7 +1054,7 @@ function SchoolsPanel({
                   <tr>
                     <td>
                       <button
-                        aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${school.school.name}`}
+                        aria-label={t('admin.expandSchool', { action: isExpanded ? t('admin.collapse') : t('admin.expand'), schoolName: school.school.name })}
                         className="ops-icon-button"
                         onClick={() => void toggleExpanded(schoolId)}
                       >
@@ -1062,9 +1072,9 @@ function SchoolsPanel({
                     <td>{participantCount}</td>
                     <td>
                       <div className="ops-row-actions">
-                        <button className="ops-button" onClick={() => void copyTeacherCode(school.school.teacherCode)}>Copy</button>
+                        <button className="ops-button" onClick={() => void copyTeacherCode(school.school.teacherCode)}>{t('common.copy')}</button>
                         <button className="ops-button" disabled={busySchoolId === schoolId} onClick={() => void resetCode(schoolId)}>
-                          {busySchoolId === schoolId ? 'Resetting...' : 'Reset teacher code'}
+                          {busySchoolId === schoolId ? t('admin.resetting') : t('admin.resetTeacherCode')}
                         </button>
                       </div>
                     </td>
@@ -1107,7 +1117,7 @@ function SchoolsPanel({
           </tbody>
         </table>
       </div>
-      {filteredSchools.length === 0 && <p className="ops-subtle">No schools match the search.</p>}
+      {filteredSchools.length === 0 && <p className="ops-subtle">{t('admin.noSchoolsMatch')}</p>}
     </section>
   )
 }
@@ -1125,20 +1135,21 @@ function AddClassPanel({
   onChange: (value: string) => void
   onAdd: () => Promise<void>
 }) {
+  const t = useT()
   return (
     <section className="ops-nested-section">
       <div className="ops-topbar compact">
         <div>
-          <h3>Add class</h3>
-          <p className="ops-subtle">Create a class under {schoolName}.</p>
+          <h3>{t('teacher.addClass')}</h3>
+          <p className="ops-subtle">{t('admin.addClassDescription', { schoolName })}</p>
         </div>
       </div>
       <div className="ops-inline-form">
-        <label className="ops-label">Class name
+        <label className="ops-label">{t('common.className')}
           <input className="ops-input" value={value} onChange={(event) => onChange(event.target.value)} />
         </label>
         <button className="ops-button primary" disabled={busy || !value.trim()} onClick={() => void onAdd()}>
-          {busy ? 'Adding...' : 'Add class'}
+          {busy ? t('teacher.adding') : t('teacher.addClass')}
         </button>
       </div>
     </section>
@@ -1158,23 +1169,24 @@ function TeacherBindingsPanel({
   schoolId: string
   onRevoke: (teacher: TeacherBinding) => void
 }) {
+  const t = useT()
   return (
     <section className="ops-nested-section">
       <div className="ops-topbar compact">
-        <h3>Teachers</h3>
-        {loading && <ShimmerText busy={loading}>Loading teachers</ShimmerText>}
+        <h3>{t('admin.teachers')}</h3>
+        {loading && <ShimmerText busy={loading}>{t('admin.loadingTeachers')}</ShimmerText>}
       </div>
       {!loading && teachers.length === 0 ? (
-        <p className="ops-subtle">No teachers bound to this school.</p>
+        <p className="ops-subtle">{t('admin.noTeachers')}</p>
       ) : (
         <div className="ops-table-wrap">
           <table className="ops-table compact">
             <thead>
               <tr>
-                <th>Email</th>
-                <th>UID</th>
-                <th>Bound at</th>
-                <th>Action</th>
+                <th>{t('common.email')}</th>
+                <th>{t('common.uid')}</th>
+                <th>{t('admin.boundAt')}</th>
+                <th>{t('common.action')}</th>
               </tr>
             </thead>
             <tbody>
@@ -1187,7 +1199,7 @@ function TeacherBindingsPanel({
                     <td>{formatDateTime(teacher.boundAt)}</td>
                     <td>
                       <button className="ops-button danger" disabled={revokingKey === key} onClick={() => onRevoke(teacher)}>
-                        {revokingKey === key ? 'Revoking...' : 'Revoke'}
+                        {revokingKey === key ? t('admin.revoking') : t('admin.revoke')}
                       </button>
                     </td>
                   </tr>
@@ -1224,17 +1236,18 @@ function ClassList({
   onToggleClass: (schoolId: string, classId: string) => Promise<void>
   onViewRanking: (schoolId: string, classId: string) => Promise<void>
 }) {
+  const t = useT()
   return (
     <div className="ops-class-list">
       <table className="ops-table compact">
         <thead>
           <tr>
-            <th aria-label="Expand class"></th>
-            <th>Class</th>
-            <th>Participants</th>
-            <th>Approved</th>
-            <th>Submitted</th>
-            <th>Ranking</th>
+            <th aria-label={t('admin.expandClass')}></th>
+            <th>{t('common.class')}</th>
+            <th>{t('common.participants')}</th>
+            <th>{t('common.approved')}</th>
+            <th>{t('admin.submitted')}</th>
+            <th>{t('common.ranking')}</th>
           </tr>
         </thead>
         <tbody>
@@ -1246,7 +1259,7 @@ function ClassList({
                 <tr>
                   <td>
                     <button
-                      aria-label={`${classExpanded ? 'Collapse' : 'Expand'} ${classStats.classInfo.name}`}
+                      aria-label={t('admin.expandSchool', { action: classExpanded ? t('admin.collapse') : t('admin.expand'), schoolName: classStats.classInfo.name })}
                       className="ops-icon-button"
                       onClick={() => void onToggleClass(school.school.id, classStats.classInfo.id)}
                     >
@@ -1259,7 +1272,7 @@ function ClassList({
                   <td>{classStats.submittedCount}</td>
                   <td>
                     <button className="ops-button" disabled={busyRankingKey === key} onClick={() => void onViewRanking(school.school.id, classStats.classInfo.id)}>
-                      {busyRankingKey === key ? 'Loading...' : rankingKey === key ? 'Hide ranking' : 'View ranking'}
+                      {busyRankingKey === key ? t('common.loading') : rankingKey === key ? t('admin.hideRanking') : t('admin.viewRanking')}
                     </button>
                   </td>
                 </tr>
@@ -1299,23 +1312,24 @@ function ParticipantTable({
   participants: ParticipantDoc[]
   loading: boolean
 }) {
+  const t = useT()
   return (
     <section className="ops-nested-section">
       <div className="ops-topbar compact">
-        <h3>Participants · {classStats.classInfo.name}</h3>
-        {loading && <ShimmerText busy={loading}>Loading participants</ShimmerText>}
+        <h3>{t('common.participants')} · {classStats.classInfo.name}</h3>
+        {loading && <ShimmerText busy={loading}>{t('admin.loadingParticipants')}</ShimmerText>}
       </div>
       {!loading && participants.length === 0 ? (
-        <p className="ops-subtle">No participants registered yet.</p>
+        <p className="ops-subtle">{t('ranking.noParticipants')}</p>
       ) : (
         <div className="ops-table-wrap">
           <table className="ops-table compact">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Public ID</th>
-                <th>Status</th>
-                <th>Registered</th>
+                <th>{t('common.name')}</th>
+                <th>{t('common.publicId')}</th>
+                <th>{t('common.status')}</th>
+                <th>{t('common.registered')}</th>
               </tr>
             </thead>
             <tbody>
@@ -1323,7 +1337,7 @@ function ParticipantTable({
                 <tr key={participant.id}>
                   <td>{participant.name}</td>
                   <td><code>{participant.publicId}</code></td>
-                  <td><span className={`ops-pill ${participant.status === 'approved' ? 'ok' : participant.status === 'pending' ? '' : 'warn'}`}>{statusLabel(participant.status)}</span></td>
+                  <td><span className={`ops-pill ${participant.status === 'approved' ? 'ok' : participant.status === 'pending' ? '' : 'warn'}`}>{statusLabel(participant.status, t)}</span></td>
                   <td>{formatDateTime(participant.registeredAt)}</td>
                 </tr>
               ))}
@@ -1336,22 +1350,23 @@ function ParticipantTable({
 }
 
 function LeaderboardTable({ event, rows }: { event: EventDoc; rows: LeaderboardRow[] }) {
+  const t = useT()
   const challenges = event.challenges.length ? event.challenges : fallbackChallenges
   const maxAttempts = event.attemptsPerChallenge === null ? null : event.attemptsPerChallenge * challenges.length
 
-  if (rows.length === 0) return <p className="ops-subtle">No ranking records yet.</p>
+  if (rows.length === 0) return <p className="ops-subtle">{t('ranking.noRecords')}</p>
 
   return (
     <div className="ops-table-wrap">
       <table className="ops-table compact">
         <thead>
           <tr>
-            <th>Rank</th>
-            <th>Name</th>
+            <th>{t('common.rank')}</th>
+            <th>{t('common.name')}</th>
             {challenges.map((challenge) => <th key={challenge.slot}>{challenge.name}</th>)}
-            <th>Completed</th>
-            <th>Average</th>
-            <th>Attempts</th>
+            <th>{t('common.completed')}</th>
+            <th>{t('common.average')}</th>
+            <th>{t('common.attempts')}</th>
           </tr>
         </thead>
         <tbody>
@@ -1359,7 +1374,7 @@ function LeaderboardTable({ event, rows }: { event: EventDoc; rows: LeaderboardR
             <Fragment key={row.publicId}>
               {row.completedCount === 0 && rows[index - 1]?.completedCount !== 0 && (
                 <tr className="ops-group-row">
-                  <td colSpan={challenges.length + 5}>No completed challenge yet</td>
+                  <td colSpan={challenges.length + 5}>{t('ranking.noCompletedGroup')}</td>
                 </tr>
               )}
               <tr>
@@ -1367,8 +1382,8 @@ function LeaderboardTable({ event, rows }: { event: EventDoc; rows: LeaderboardR
                 <td>
                   <strong>{row.name}</strong>
                   <br />
-                  <span className="ops-subtle">{row.publicId} - {statusLabel(row.status)}</span>
-                  {row.completedCount === 0 && <span className="ops-pill warn">No record</span>}
+                  <span className="ops-subtle">{row.publicId} - {statusLabel(row.status, t)}</span>
+                  {row.completedCount === 0 && <span className="ops-pill warn">{t('ranking.noRecord')}</span>}
                 </td>
                 {challenges.map((challenge) => (
                   <td key={challenge.slot}>{formatSec(row.bests[challenge.slot])}</td>
@@ -1376,12 +1391,12 @@ function LeaderboardTable({ event, rows }: { event: EventDoc; rows: LeaderboardR
                 <td>{row.completedCount}/{challenges.length}</td>
                 <td>{formatSec(row.averageSec)}</td>
                 <td>
-                  {maxAttempts === null ? `${totalAttempts(row)} / unlimited` : `${totalAttempts(row)} / ${maxAttempts}`}
+                  {maxAttempts === null ? `${totalAttempts(row)} / ${t('common.unlimited')}` : `${totalAttempts(row)} / ${maxAttempts}`}
                   <br />
                   <span className="ops-subtle">
                     {challenges.map((challenge) => (
                       <span key={challenge.slot} className="ops-attempt-chip">
-                        {challengeShortLabel(challenge.slot)} {row.attemptsUsed[challenge.slot]}/{attemptLimitText(event.attemptsPerChallenge)}
+                        {challengeShortLabel(challenge.slot)} {row.attemptsUsed[challenge.slot]}/{attemptLimitText(event.attemptsPerChallenge, t)}
                       </span>
                     ))}
                   </span>

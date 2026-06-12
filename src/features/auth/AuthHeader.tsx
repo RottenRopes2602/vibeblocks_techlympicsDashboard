@@ -5,14 +5,15 @@ import type { User } from 'firebase/auth'
 import { api } from '../../api'
 import type { RoleDoc } from '../../api/types'
 import { auth } from '../../lib/firebase'
+import { LanguageToggle, useT } from '../../lib/i18n'
 import { useToast } from '../../lib/toast'
 import { userLabel } from './session'
 
-function accountDeleteErrorText(error: unknown): string {
+function accountDeleteErrorText(error: unknown, t: ReturnType<typeof useT>): string {
   const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
   const message = error instanceof Error ? error.message : String(error)
   if (code === 'auth/requires-recent-login' || message.includes('REAUTH_REQUIRED')) {
-    return 'Please sign in again, then delete the account from this screen.'
+    return t('auth.reauthRequired')
   }
   return message
 }
@@ -29,6 +30,7 @@ export default function AuthHeader({
 }) {
   const navigate = useNavigate()
   const toast = useToast()
+  const t = useT()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -45,9 +47,7 @@ export default function AuthHeader({
   }
 
   const deleteAccount = async () => {
-    const confirmed = window.confirm(
-      'Delete this account? This removes your teacher bindings and role. You may need to sign in again before deleting.',
-    )
+    const confirmed = window.confirm(t('auth.deleteAccountConfirm'))
     if (!confirmed) return
     setBusy(true)
     setError('')
@@ -55,10 +55,10 @@ export default function AuthHeader({
       await api.deleteMyAccount()
       window.__mockRole?.(null)
       await signOut(auth).catch(() => undefined)
-      toast('Account deleted.', 'success')
+      toast(t('auth.accountDeleted'), 'success')
       navigate('/', { replace: true })
     } catch (err) {
-      const message = accountDeleteErrorText(err)
+      const message = accountDeleteErrorText(err, t)
       setError(message)
       toast(message, 'error')
     } finally {
@@ -74,16 +74,17 @@ export default function AuthHeader({
           <strong>{userLabel(user)}</strong>
         </div>
         <div className="auth-header-actions">
+          <LanguageToggle />
           {onRefresh ? (
             <button className="auth-button" type="button" onClick={() => void onRefresh()} disabled={busy}>
-              Refresh
+              {t('common.refresh')}
             </button>
           ) : null}
           <button className="auth-button danger" type="button" onClick={() => void deleteAccount()} disabled={busy}>
-            {busy ? 'Working...' : 'Delete account'}
+            {busy ? t('common.working') : t('auth.deleteAccount')}
           </button>
           <button className="auth-button" type="button" onClick={() => void logout()} disabled={busy}>
-            Sign out
+            {t('auth.signOut')}
           </button>
         </div>
       </header>

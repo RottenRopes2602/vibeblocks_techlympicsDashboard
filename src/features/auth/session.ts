@@ -2,14 +2,15 @@ import { useEffect, useState } from 'react'
 import { onAuthStateChanged } from 'firebase/auth'
 import type { User } from 'firebase/auth'
 import { auth } from '../../lib/firebase'
+import { translate } from '../../lib/i18n'
 
 export function isRealUser(user: User | null): user is User {
   return Boolean(user && !user.isAnonymous)
 }
 
 export function userLabel(user: User | null): string {
-  if (!user) return 'Signed out'
-  return user.displayName || user.email || 'Signed in'
+  if (!user) return translate('auth.signedOut')
+  return user.displayName || user.email || translate('auth.signedIn')
 }
 
 export function useAuthSession() {
