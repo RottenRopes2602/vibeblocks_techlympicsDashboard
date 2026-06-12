@@ -66,7 +66,7 @@ export interface CompetitionApi {
   setJoinActive(c: ClassPath, active: boolean): Promise<void>
   /** v4: 반 추가 — admin + 해당 학교 바인딩 teacher. joinCode 자동 발급. v5: grade = 학년 (school.level 기준) */
   addClass(s: SchoolPath, name: string, grade?: number): Promise<ClassDoc>
-  /** v5: 학교 등급 설정 — admin/master + 해당 학교 바인딩 teacher (level 미설정 학교 후설정용) */
+  /** v5: 학교 등급 설정 — admin/master 전용 (teacher는 등급 변경 불가, import된 학교에 코드로 가입만) */
   setSchoolLevel(s: SchoolPath, level: SchoolLevel): Promise<void>
 
   // ---------- 주최측 admin (웹 — CONTRACT §5.3) ----------
@@ -82,6 +82,8 @@ export interface CompetitionApi {
     eventId: string,
     patch: Partial<Pick<EventDoc, 'name' | 'startsAt' | 'endsAt' | 'attemptsPerChallenge' | 'frozen' | 'visibility'>>,
   ): Promise<void>
+  /** v6: 이벤트 삭제 — admin/master. 하위 학교·학급·참가자·기록 + joinCode/teacherCode 매핑까지 연쇄 삭제 (복구 불가) */
+  deleteEvent(eventId: string): Promise<void>
   /** xlsx/csv 매핑 결과 일괄 등록 — 학교·학급 생성 + 코드 발급. 중복(학교명+학급명)은 skip */
   importSchools(eventId: string, rows: ImportRow[]): Promise<ImportResult>
   listEventSchools(eventId: string): Promise<OrganizerSchoolView[]>

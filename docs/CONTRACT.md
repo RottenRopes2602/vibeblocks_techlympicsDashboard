@@ -1,11 +1,12 @@
 # vb-116 공유 계약 (CONTRACT) — v6 (2026-06-12 3차 개정)
 
 > **v6 변경 (학교 등급·학년 — vib-318):**
-> A. **SchoolLevel 도입** (말레이시아 체계): `primary`=Sekolah Rendah(Standard/Tahun 1-6) / `secondary`=Sekolah Menengah(Form/Tingkatan 1-5). `SchoolDoc.level?` — 신규 생성(단건 추가·벌크 import)은 입력, legacy 학교는 콘솔 후설정(teacher: 학교 헤더 / admin: Schools 표 Level 셀).
-> B. **ClassDoc.grade?** — 학급 학년(숫자). 생성 시 school.level 기준 선택지(Standard 1-6 / Form 1-5). 표시 라벨은 level 기반(`lib/grade.ts` formatGrade). 학년 필터는 grade 필드 우선, 없으면 학급명 앞자리 파싱(legacy).
-> C. api: `addClass(s, name, grade?)` / `setSchoolLevel(s, level)`(admin/master + 바인딩 teacher). `ImportRow.level?` — import 셀 자유표기(primary/rendah·secondary/menengah) 파싱.
-> D. rules: school keys에 `level`(enum 검증) — 바인딩 teacher는 level 키 단독 update만 허용. class keys에 `grade`(int 1-6).
+> A. **SchoolLevel 도입** (말레이시아 체계): `primary`=Sekolah Rendah(Standard/Tahun 1-6) / `secondary`=Sekolah Menengah(Form/Tingkatan 1-5). `SchoolDoc.level?` — 신규 생성(단건 추가·벌크 import)은 입력, legacy 학교는 admin이 Schools 표 Level 셀에서 후설정. **teacher는 등급 변경 불가** (import된 학교에 교사코드로 가입만) — 학교명 아래 등급 표시만.
+> B. **ClassDoc.grade?** — 학급 학년(숫자). 생성 시 school.level 기준 선택지(Standard 1-6 / Form 1-5). 표시 라벨은 level 기반(`lib/grade.ts` formatGrade). 학년 필터는 grade 필드 우선, 없으면 학급명 앞자리 파싱(legacy). level 미설정 학교는 학년 선택 비활성(주최측 문의 안내).
+> C. api: `addClass(s, name, grade?)` / `setSchoolLevel(s, level)`(admin/master 전용). `ImportRow.level?` — import 셀 자유표기(primary/rendah·secondary/menengah) 파싱.
+> D. rules: school keys에 `level`(enum 검증, admin write 경로만). class keys에 `grade`(int 1-6).
 > E. v4-E("grade 입력 폐지")는 **앱 참가자 grade** 한정 — 학급 grade는 본 개정으로 정식 모델.
+> F. **`deleteEvent(eventId)`** (admin/master): 이벤트 연쇄 삭제 — 학교(teachers)·학급(board·participants·attempts)·joinCodes/teacherCodes 매핑까지 클라이언트 배치 삭제(Spark, 400/batch). rules: events/schools/classes/participants/attempts delete = isAdmin() (attempts 개별 조작 금지는 운영 규율). UI = Events 탭 danger 버튼 + 카운트 명시 ConfirmModal.
 
 > **v4 변경:**
 > A. **랭킹 정렬 v4** (`scoring.ts`): 완료 종목 수 내림차순 → 완료분 평균 오름차순 → 갱신시각. **미시도 포함 전원 표시** (완료 0 = rank '-', 최하단). LeaderboardRow에 `completedCount` 추가. 무순위제(3개 미완) 폐지.

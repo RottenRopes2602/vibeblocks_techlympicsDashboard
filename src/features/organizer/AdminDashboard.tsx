@@ -404,9 +404,14 @@ export default function AdminDashboard({ embedded = false }: { embedded?: boolea
           {tab === 'events' && selectedEvent && (
             <EventEditor
               event={selectedEvent}
+              stats={stats}
               onSaved={async (message) => {
                 toast(message, 'success')
                 await refresh(selectedEvent.id)
+              }}
+              onDeleted={async () => {
+                toast(t('admin.eventDeleted', { name: selectedEvent.name }), 'success')
+                await refresh('')
               }}
             />
           )}
@@ -491,13 +496,41 @@ function AttemptsControl({ form, onChange }: { form: EventForm; onChange: (next:
   )
 }
 
-function EventEditor({ event, onSaved }: { event: EventDoc; onSaved: (message: string) => Promise<void> }) {
+function EventEditor({
+  event,
+  stats,
+  onSaved,
+  onDeleted,
+}: {
+  event: EventDoc
+  stats: EventStats | null
+  onSaved: (message: string) => Promise<void>
+  onDeleted: () => Promise<void>
+}) {
   const toast = useToast()
   const t = useT()
   const [form, setForm] = useState<EventForm>(() => eventToForm(event))
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [freezing, setFreezing] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const deleteEvent = async () => {
+    setDeleting(true)
+    setError('')
+    try {
+      await api.deleteEvent(event.id)
+      setDeleteOpen(false)
+      await onDeleted()
+    } catch (err) {
+      const message = getErrorMessage(err)
+      setError(message)
+      toast(message, 'error')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   useEffect(() => {
     setForm(eventToForm(event))
@@ -564,7 +597,25 @@ function EventEditor({ event, onSaved }: { event: EventDoc; onSaved: (message: s
         <button className="ops-button primary" onClick={() => void save()} disabled={saving || !form.name.trim()}>
           {saving ? t('common.saving') : t('admin.saveChanges')}
         </button>
+        <button className="ops-button danger" onClick={() => setDeleteOpen(true)} disabled={deleting}>
+          {t('admin.deleteEvent')}
+        </button>
       </div>
+      {deleteOpen && (
+        <ConfirmModal
+          busy={deleting}
+          confirmLabel={t('admin.deleteEvent')}
+          message={t('admin.deleteEventConfirm', {
+            name: event.name,
+            schools: stats?.schoolCount ?? 0,
+            classes: stats?.classCount ?? 0,
+            participants: stats?.participantCount ?? 0,
+          })}
+          title={t('admin.deleteEvent')}
+          onClose={() => setDeleteOpen(false)}
+          onConfirm={() => void deleteEvent()}
+        />
+      )}
     </section>
   )
 }
@@ -795,7 +846,13 @@ function ImportPanel({
       <section className="ops-subsection">
         <h3>{t('admin.workbookImport')}</h3>
         <div className="ops-form two">
-          <label className="ops-label">{t('admin.uploadWorkbook')}<input className="ops-file" type="file" accept=".xlsx,.xls,.csv" onChange={(e) => void loadFile(e.target.files?.[0])} /></label>
+          <label className="ops-label">{t('admin.uploadWorkbook')}
+            <span className="ops-file-picker">
+              <input id="workbook-file" className="ops-file-hidden" type="file" accept=".xlsx,.xls,.csv" onChange={(e) => void loadFile(e.target.files?.[0])} />
+              <label htmlFor="workbook-file" className="ops-button">{t('admin.chooseFile')}</label>
+              <span className="ops-subtle">{workbook ? workbook.fileName : t('admin.noFileSelected')}</span>
+            </span>
+          </label>
           {workbook && (
             <label className="ops-label">{t('admin.sheet')}
               <select className="ops-select" value={workbook.sheetName} onChange={(e) => setWorkbook({ ...workbook, sheetName: e.target.value })}>

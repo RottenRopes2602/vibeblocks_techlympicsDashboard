@@ -789,6 +789,52 @@ export function createFirestoreApi(): CompetitionApi {
       }
     },
 
+    async deleteEvent(eventId) {
+      try {
+        await ensureUser()
+        // Spark(함수 없음) 환경 — 클라이언트 연쇄 삭제. 배치 400개 단위 flush.
+        let batch = writeBatch(db)
+        let pending = 0
+        const queueDelete = async (ref: Parameters<typeof deleteDoc>[0]) => {
+          batch.delete(ref)
+          pending += 1
+          if (pending >= 400) {
+            await batch.commit()
+            batch = writeBatch(db)
+            pending = 0
+          }
+        }
+        const schoolSnaps = await getDocs(collection(db, 'events', eventId, 'schools'))
+        for (const schoolSnap of schoolSnaps.docs) {
+          const schoolId = schoolSnap.id
+          const teacherCode = String(schoolSnap.data().teacherCode ?? '')
+          const teacherSnaps = await getDocs(collection(db, 'events', eventId, 'schools', schoolId, 'teachers'))
+          for (const snap of teacherSnaps.docs) await queueDelete(snap.ref)
+          const classSnaps = await getDocs(collection(db, 'events', eventId, 'schools', schoolId, 'classes'))
+          for (const classSnap of classSnaps.docs) {
+            const classId = classSnap.id
+            const joinCode = String(classSnap.data().joinCode ?? '')
+            const boardSnaps = await getDocs(collection(db, 'events', eventId, 'schools', schoolId, 'classes', classId, 'board'))
+            for (const snap of boardSnaps.docs) await queueDelete(snap.ref)
+            const participantSnaps = await getDocs(collection(db, 'events', eventId, 'schools', schoolId, 'classes', classId, 'participants'))
+            for (const participantSnap of participantSnaps.docs) {
+              const attemptSnaps = await getDocs(collection(participantSnap.ref, 'attempts'))
+              for (const snap of attemptSnaps.docs) await queueDelete(snap.ref)
+              await queueDelete(participantSnap.ref)
+            }
+            if (joinCode) await queueDelete(doc(db, 'joinCodes', joinCode))
+            await queueDelete(classSnap.ref)
+          }
+          if (teacherCode) await queueDelete(doc(db, 'teacherCodes', teacherCode))
+          await queueDelete(schoolSnap.ref)
+        }
+        await queueDelete(eventRef(eventId))
+        if (pending > 0) await batch.commit()
+      } catch (error) {
+        return mapError(error)
+      }
+    },
+
     async importSchools(eventId, rows) {
       try {
         await ensureUser()

@@ -11,11 +11,10 @@ import type {
   ParticipantPath,
   ParticipantStatus,
   RoleDoc,
-  SchoolDoc,
   SchoolLevel,
   TeacherSchoolView,
 } from '../../api/types'
-import { GRADES_BY_LEVEL, SCHOOL_LEVELS } from '../../api/types'
+import { GRADES_BY_LEVEL } from '../../api/types'
 import { formatGrade, levelLabel } from '../../lib/grade'
 import AuthHeader from '../auth/AuthHeader'
 import TeacherCodeGate from '../auth/TeacherCodeGate'
@@ -484,14 +483,13 @@ function Dashboard({
 
       <div className="class-toolbar">
         <div>
-          <h2>
-            {activeSchool.school.name}{' '}
+          <h2>{activeSchool.school.name}</h2>
+          <p className="school-level-line">
             <span className="class-grade-chip">{levelLabel(activeSchool.school.level, t)}</span>
-          </h2>
+          </p>
           <p>
             {t('teacher.classesCount', { visible: filteredClasses.length, total: activeSchool.classes.length })}
           </p>
-          {!activeSchool.school.level ? <SchoolLevelSetter school={activeSchool.school} onChanged={onClassChanged} /> : null}
         </div>
         <div className="class-toolbar-actions">
           {gradeOptions.length > 1 ? (
@@ -657,39 +655,6 @@ function ClassListView({
   )
 }
 
-function SchoolLevelSetter({ school, onChanged }: { school: SchoolDoc; onChanged: () => Promise<void> }) {
-  const toast = useToast()
-  const t = useT()
-  const [busy, setBusy] = useState(false)
-
-  const setLevel = async (level: SchoolLevel) => {
-    setBusy(true)
-    try {
-      await api.setSchoolLevel({ eventId: school.eventId, schoolId: school.id }, level)
-      toast(`${school.name} — ${levelLabel(level, t)}`, 'success')
-      await onChanged()
-    } catch (error) {
-      toast(errorText(error), 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <label className="school-level-setter">
-      {t('common.schoolLevel')}
-      <select disabled={busy} value="" onChange={(event) => event.target.value && void setLevel(event.target.value as SchoolLevel)}>
-        <option value="">{t('common.selectLevel')}</option>
-        {SCHOOL_LEVELS.map((level) => (
-          <option key={level} value={level}>
-            {levelLabel(level, t)}
-          </option>
-        ))}
-      </select>
-    </label>
-  )
-}
-
 function AddClassModal({
   school,
   onClose,
@@ -702,12 +667,10 @@ function AddClassModal({
   const toast = useToast()
   const t = useT()
   const [name, setName] = useState('')
-  const [level, setLevel] = useState<SchoolLevel | ''>(school.school.level ?? '')
   const [grade, setGrade] = useState('')
   const [busy, setBusy] = useState(false)
-  const knownLevel = school.school.level
-  const effectiveLevel = knownLevel ?? (level || undefined)
-  const gradeOptions = effectiveLevel ? GRADES_BY_LEVEL[effectiveLevel] : []
+  const level = school.school.level
+  const gradeOptions = level ? GRADES_BY_LEVEL[level] : []
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -726,7 +689,6 @@ function AddClassModal({
     setBusy(true)
     try {
       const path = { eventId: school.school.eventId, schoolId: school.school.id }
-      if (!knownLevel && level) await api.setSchoolLevel(path, level)
       const gradeNumber = grade ? Number(grade) : undefined
       const classInfo = await api.addClass(path, trimmed, gradeNumber)
       toast(t('teacher.classAdded', { className: classInfo.name }), 'success')
@@ -754,32 +716,13 @@ function AddClassModal({
           {t('common.className')}
           <input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder={t('teacher.exampleClass')} />
         </label>
-        {!knownLevel ? (
-          <label>
-            {t('common.schoolLevel')}
-            <select
-              value={level}
-              onChange={(event) => {
-                setLevel(event.target.value as SchoolLevel | '')
-                setGrade('')
-              }}
-            >
-              <option value="">{t('common.selectLevel')}</option>
-              {SCHOOL_LEVELS.map((option) => (
-                <option key={option} value={option}>
-                  {levelLabel(option, t)}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
         <label>
           {t('common.grade')}
-          <select value={grade} onChange={(event) => setGrade(event.target.value)} disabled={!effectiveLevel}>
-            <option value="">{effectiveLevel ? t('common.noGrade') : t('teacher.setLevelFirst')}</option>
+          <select value={grade} onChange={(event) => setGrade(event.target.value)} disabled={!level}>
+            <option value="">{level ? t('common.noGrade') : t('teacher.gradeNeedsLevel')}</option>
             {gradeOptions.map((option) => (
               <option key={option} value={option}>
-                {formatGrade(effectiveLevel, option, t)}
+                {formatGrade(level, option, t)}
               </option>
             ))}
           </select>
@@ -1621,19 +1564,8 @@ select {
   padding: 5px 7px;
   text-transform: uppercase;
 }
-.school-level-setter {
-  align-items: center;
-  color: #667085;
-  display: inline-flex;
-  font-size: 12px;
-  font-weight: 800;
-  gap: 8px;
-  margin-top: 6px;
-}
-.school-level-setter select {
-  border: 1px solid #c9d8ff;
-  border-radius: 8px;
-  padding: 4px 8px;
+.school-level-line {
+  margin: 4px 0 2px;
 }
 .class-card-select strong,
 .print-code {

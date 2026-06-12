@@ -363,7 +363,7 @@ export function createMockApi(): CompetitionApi {
     },
 
     async setSchoolLevel(sp: SchoolPath, level: SchoolLevel) {
-      requireRole(['teacher', 'admin', 'master'])
+      requireRole(['admin', 'master'])
       const school = s.schools.find((x) => x.id === sp.schoolId)
       if (!school) throw new Error('SCHOOL_NOT_FOUND')
       school.level = level
@@ -503,6 +503,21 @@ export function createMockApi(): CompetitionApi {
       const e = s.events.find((x) => x.id === eventId)
       if (!e) throw new Error('EVENT_NOT_FOUND')
       Object.assign(e, patch)
+      return delay(undefined)
+    },
+
+    async deleteEvent(eventId) {
+      requireRole(['admin', 'master'])
+      if (!s.events.some((x) => x.id === eventId)) throw new Error('EVENT_NOT_FOUND')
+      const deadParticipants = s.participants.filter((p) => p.eventId === eventId)
+      deadParticipants.forEach((p) => s.attempts.delete(p.id))
+      s.classes.filter((c) => c.eventId === eventId).forEach((c) => s.board.delete(c.id))
+      s.participants = s.participants.filter((p) => p.eventId !== eventId)
+      s.classes = s.classes.filter((c) => c.eventId !== eventId)
+      const deadSchoolIds = new Set(s.schools.filter((x) => x.eventId === eventId).map((x) => x.id))
+      s.mySchoolIds = s.mySchoolIds.filter((id) => !deadSchoolIds.has(id))
+      s.schools = s.schools.filter((x) => x.eventId !== eventId)
+      s.events = s.events.filter((x) => x.id !== eventId)
       return delay(undefined)
     },
 

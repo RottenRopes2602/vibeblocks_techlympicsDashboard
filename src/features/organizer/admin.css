@@ -505,3 +505,18 @@
     padding-right: 10px;
   }
 }
+
+.ops-file-picker {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-height: 38px;
+}
+.ops-file-hidden {
+  display: none;
+}
+.ops-file-picker .ops-button {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
