@@ -5,6 +5,7 @@ import TeacherPage from './pages/TeacherPage'
 import AdminConsolePage from './pages/AdminConsolePage'
 import MasterConsolePage from './pages/MasterConsolePage'
 import { ToastProvider } from './lib/toast'
+import { I18nProvider } from './lib/i18n'
 
 // 라우트 소유권 = docs/CONTRACT.md §7 — 각 페이지 파일은 담당 task만 수정.
 // 이 파일(App.tsx)은 Claude 소유: 라우트 추가·변경은 카드 LOG로 요청.
@@ -12,6 +13,7 @@ import { ToastProvider } from './lib/toast'
 //     /join = QR 폴백 랜딩(앱 안내)만.
 export default function App() {
   return (
+    <I18nProvider>
     <ToastProvider>
       <Routes>
         <Route path="/" element={<HomePage />} />
@@ -24,5 +26,6 @@ export default function App() {
         <Route path="/r/:joinCode" element={<Navigate to="/" replace />} />
       </Routes>
     </ToastProvider>
+    </I18nProvider>
   )
 }
