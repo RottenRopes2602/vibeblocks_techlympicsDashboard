@@ -14,12 +14,13 @@ import type {
   ParticipantDoc,
   TeacherBinding,
 } from '../../api/types'
+import { ShimmerText } from '../../lib/Shimmer'
 import { useToast } from '../../lib/toast'
 import { sampleImportRows } from './fixtures/sampleImportRows'
 import './admin.css'
 
-type AdminTab = 'events' | 'import' | 'schools'
-type ImportField = keyof ImportRow
+type AdminTab = 'events' | 'import' | 'schools' | 'participants'
+type ImportField = 'schoolName' | 'state' | 'zone'
 type AdminSchoolView = Awaited<ReturnType<typeof api.listEventSchools>>[number]
 
 interface ParsedWorkbook {
@@ -36,6 +37,13 @@ interface PreviewRow {
   warnings: string[]
 }
 
+interface ParticipantRow {
+  participant: ParticipantDoc
+  school: AdminSchoolView['school']
+  classInfo: ClassStats['classInfo']
+  grade: string
+}
+
 interface EventForm {
   name: string
   startsAt: string
@@ -43,12 +51,11 @@ interface EventForm {
   attemptsPerChallenge: number | null
 }
 
-const requiredFields: ImportField[] = ['schoolName', 'className']
-const importFields: ImportField[] = ['schoolName', 'className', 'state', 'zone']
+const requiredFields: ImportField[] = ['schoolName']
+const importFields: ImportField[] = ['schoolName', 'state', 'zone']
 
 const fieldLabels: Record<ImportField, string> = {
   schoolName: 'School name',
-  className: 'Class name',
   state: 'State',
   zone: 'Zone',
 }
@@ -103,7 +110,6 @@ function pickInitialMapping(headers: string[]): Record<ImportField, string> {
     headers.find((header) => candidates.some((candidate) => header.toLowerCase().replace(/\s+/g, '').includes(candidate))) ?? ''
   return {
     schoolName: findHeader(['school', 'schoolname', 'nama sekolah', 'sekolah']),
-    className: findHeader(['class', 'classname', 'kelas']),
     state: findHeader(['state', 'negeri']),
     zone: findHeader(['zone', 'zon']),
   }
@@ -117,7 +123,6 @@ function buildPreview(rows: string[][], mapping: Record<ImportField, string>, se
     const source = Object.fromEntries(headers.map((header, i) => [header, normalizedCell(row[i])]))
     const mapped: ImportRow = {
       schoolName: normalizedCell(source[mapping.schoolName]),
-      className: normalizedCell(source[mapping.className]),
       state: normalizedCell(source[mapping.state]) || undefined,
       zone: normalizedCell(source[mapping.zone]) || undefined,
     }
@@ -125,8 +130,8 @@ function buildPreview(rows: string[][], mapping: Record<ImportField, string>, se
     requiredFields.forEach((field) => {
       if (!mapped[field]?.trim()) warnings.push(`${fieldLabels[field]} empty`)
     })
-    const dupKey = `${mapped.schoolName.toLowerCase()}::${(mapped.className ?? '').toLowerCase()}`
-    if (mapped.schoolName && mapped.className) {
+    const dupKey = mapped.schoolName.toLowerCase()
+    if (mapped.schoolName) {
       const first = seen.get(dupKey)
       if (first !== undefined) warnings.push(`Duplicate of row ${first + 2}`)
       else seen.set(dupKey, bodyIndex)
@@ -163,15 +168,13 @@ function downloadSampleWorkbook() {
 function downloadResultWorkbook(rows: PreviewRow[], schools: AdminSchoolView[]) {
   const output = rows.map((row) => {
     const school = schools.find((item) => item.school.name.toLowerCase() === row.mapped.schoolName.toLowerCase())
-    const classInfo = school?.classes.find((item) => item.classInfo.name.toLowerCase() === (row.mapped.className ?? '').toLowerCase())
     return {
       ...row.source,
       schoolName: row.mapped.schoolName,
-      className: row.mapped.className,
       state: row.mapped.state ?? '',
       zone: row.mapped.zone ?? '',
       teacherCode: school?.school.teacherCode ?? '',
-      importStatus: classInfo ? 'created-or-existing' : 'skipped',
+      importStatus: school ? 'created-or-existing' : 'skipped',
     }
   })
   const worksheet = XLSX.utils.json_to_sheet(output)
@@ -206,6 +209,10 @@ function challengeShortLabel(slot: ChallengeSlot) {
 
 function attemptLimitText(limit: number | null) {
   return limit === null ? 'Unlimited' : String(limit)
+}
+
+function gradeFromClassName(className: string) {
+  return className.trim().match(/^(\d+)/)?.[1] ?? '-'
 }
 
 export default function AdminDashboard() {
@@ -298,9 +305,9 @@ export default function AdminDashboard() {
               {selectedEvent && <span className={`ops-pill ${selectedEvent.frozen ? 'warn' : 'ok'}`}>{selectedEvent.frozen ? 'Frozen' : 'Open'}</span>}
             </div>
             <div className="ops-tabs">
-              {(['events', 'import', 'schools'] as AdminTab[]).map((item) => (
+              {(['events', 'import', 'schools', 'participants'] as AdminTab[]).map((item) => (
                 <button className={`ops-tab ${tab === item ? 'active' : ''}`} key={item} onClick={() => setTab(item)}>
-                  {item === 'events' ? 'Event setup' : item === 'import' ? 'Import' : 'Schools'}
+                  {item === 'events' ? 'Event setup' : item === 'import' ? 'Import' : item === 'schools' ? 'Schools' : 'Participants'}
                 </button>
               ))}
             </div>
@@ -319,7 +326,6 @@ export default function AdminDashboard() {
           {tab === 'import' && selectedEvent && (
             <ImportPanel
               event={selectedEvent}
-              schools={schools}
               onImported={async (message) => {
                 toast(message, 'success')
                 await refresh(selectedEvent.id)
@@ -335,6 +341,9 @@ export default function AdminDashboard() {
                 await refresh(selectedEvent.id)
               }}
             />
+          )}
+          {tab === 'participants' && selectedEvent && (
+            <ParticipantsPanel event={selectedEvent} schools={schools} />
           )}
         </section>
       </div>
@@ -525,35 +534,26 @@ function EventCreateModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
 function ImportPanel({
   event,
-  schools,
   onImported,
 }: {
   event: EventDoc
-  schools: AdminSchoolView[]
   onImported: (message: string) => Promise<void>
 }) {
   const toast = useToast()
-  const [schoolForm, setSchoolForm] = useState({ schoolName: '', state: '', firstClassName: '' })
-  const [classForm, setClassForm] = useState({ schoolId: '', className: '' })
+  const [schoolForm, setSchoolForm] = useState({ schoolName: '', state: '', zone: '' })
   const [workbook, setWorkbook] = useState<ParsedWorkbook | null>(null)
-  const [mapping, setMapping] = useState<Record<ImportField, string>>({ schoolName: '', className: '', state: '', zone: '' })
+  const [mapping, setMapping] = useState<Record<ImportField, string>>({ schoolName: '', state: '', zone: '' })
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [result, setResult] = useState<ImportResult | null>(null)
   const [resultRows, setResultRows] = useState<PreviewRow[]>([])
   const [error, setError] = useState('')
   const [schoolBusy, setSchoolBusy] = useState(false)
-  const [classBusy, setClassBusy] = useState(false)
   const [workbookBusy, setWorkbookBusy] = useState(false)
 
   const rows = workbook ? workbook.sheets[workbook.sheetName] ?? [] : []
   const headers = rows[0] ?? []
   const preview = useMemo(() => buildPreview(rows, mapping, selected), [rows, mapping, selected])
   const importable = preview.filter((row) => row.selected)
-
-  useEffect(() => {
-    if (classForm.schoolId && schools.some((school) => school.school.id === classForm.schoolId)) return
-    setClassForm((current) => ({ ...current, schoolId: schools[0]?.school.id ?? '' }))
-  }, [classForm.schoolId, schools])
 
   const loadFile = async (file: File | undefined) => {
     if (!file) return
@@ -579,33 +579,17 @@ function ImportPanel({
     try {
       const response = await api.importSchools(event.id, [{
         schoolName: schoolForm.schoolName.trim(),
-        className: schoolForm.firstClassName.trim(),
         state: schoolForm.state.trim() || undefined,
+        zone: schoolForm.zone.trim() || undefined,
       }])
-      setSchoolForm({ schoolName: '', state: '', firstClassName: '' })
-      await onImported(`School import finished: ${response.schools.length} school, ${response.classes.length} class, ${response.skipped.length} skipped.`)
+      setSchoolForm({ schoolName: '', state: '', zone: '' })
+      await onImported(`School import finished: ${response.schools.length} school, ${response.skipped.length} skipped.`)
     } catch (err) {
       const message = getErrorMessage(err)
       setError(message)
       toast(message, 'error')
     } finally {
       setSchoolBusy(false)
-    }
-  }
-
-  const addClass = async () => {
-    setClassBusy(true)
-    setError('')
-    try {
-      const created = await api.addClass({ eventId: event.id, schoolId: classForm.schoolId }, classForm.className.trim())
-      setClassForm((current) => ({ ...current, className: '' }))
-      await onImported(`Class added: ${created.name}.`)
-    } catch (err) {
-      const message = getErrorMessage(err)
-      setError(message)
-      toast(message, 'error')
-    } finally {
-      setClassBusy(false)
     }
   }
 
@@ -616,7 +600,7 @@ function ImportPanel({
       const response = await api.importSchools(event.id, importable.map((row) => row.mapped))
       setResult(response)
       setResultRows(importable)
-      await onImported(`Import finished: ${response.classes.length} classes created, ${response.skipped.length} skipped.`)
+      await onImported(`Import finished: ${response.schools.length} schools touched, ${response.skipped.length} skipped.`)
     } catch (err) {
       const message = getErrorMessage(err)
       setError(message)
@@ -636,7 +620,7 @@ function ImportPanel({
       <div className="ops-topbar">
         <div>
           <h2>Import</h2>
-          <p className="ops-subtle">Add schools, add classes to existing schools, or upload a workbook. Result exports include teacher codes only.</p>
+          <p className="ops-subtle">Add schools one by one or upload a workbook. Add classes from each school row in Schools.</p>
         </div>
         <button className="ops-button" onClick={downloadSampleWorkbook}>Download sample xlsx</button>
       </div>
@@ -647,32 +631,15 @@ function ImportPanel({
         <div className="ops-form three">
           <label className="ops-label">School name<input className="ops-input" value={schoolForm.schoolName} onChange={(e) => setSchoolForm({ ...schoolForm, schoolName: e.target.value })} /></label>
           <label className="ops-label">State<input className="ops-input" value={schoolForm.state} onChange={(e) => setSchoolForm({ ...schoolForm, state: e.target.value })} /></label>
-          <label className="ops-label">First class<input className="ops-input" value={schoolForm.firstClassName} onChange={(e) => setSchoolForm({ ...schoolForm, firstClassName: e.target.value })} /></label>
+          <label className="ops-label">Zone<input className="ops-input" value={schoolForm.zone} onChange={(e) => setSchoolForm({ ...schoolForm, zone: e.target.value })} /></label>
         </div>
         <div className="ops-row-actions" style={{ marginTop: 12 }}>
           <button
             className="ops-button primary"
-            disabled={schoolBusy || !schoolForm.schoolName.trim() || !schoolForm.firstClassName.trim()}
+            disabled={schoolBusy || !schoolForm.schoolName.trim()}
             onClick={() => void addSchool()}
           >
             {schoolBusy ? 'Adding...' : 'Add school'}
-          </button>
-        </div>
-      </section>
-
-      <section className="ops-subsection">
-        <h3>Add class</h3>
-        <div className="ops-form two">
-          <label className="ops-label">School
-            <select className="ops-select" value={classForm.schoolId} onChange={(e) => setClassForm({ ...classForm, schoolId: e.target.value })}>
-              {schools.map((school) => <option key={school.school.id} value={school.school.id}>{school.school.name}</option>)}
-            </select>
-          </label>
-          <label className="ops-label">Class name<input className="ops-input" value={classForm.className} onChange={(e) => setClassForm({ ...classForm, className: e.target.value })} /></label>
-        </div>
-        <div className="ops-row-actions" style={{ marginTop: 12 }}>
-          <button className="ops-button primary" disabled={classBusy || !classForm.schoolId || !classForm.className.trim()} onClick={() => void addClass()}>
-            {classBusy ? 'Adding...' : 'Add class'}
           </button>
         </div>
       </section>
@@ -712,7 +679,6 @@ function ImportPanel({
                   <tr>
                     <th>Select</th>
                     <th>School</th>
-                    <th>Class</th>
                     <th>State</th>
                     <th>Zone</th>
                     <th>Validation</th>
@@ -728,7 +694,6 @@ function ImportPanel({
                         setSelected(next)
                       }} /></td>
                       <td>{row.mapped.schoolName}</td>
-                      <td>{row.mapped.className}</td>
                       <td>{row.mapped.state}</td>
                       <td>{row.mapped.zone}</td>
                       <td>{row.warnings.length ? row.warnings.map((warning) => <span className="ops-pill warn" key={warning}>{warning}</span>) : <span className="ops-pill ok">Ready</span>}</td>
@@ -750,12 +715,130 @@ function ImportPanel({
 
       {result && (
         <div className="ops-alert ops-success" style={{ marginTop: 12 }}>
-          Created {result.classes.length} classes. Skipped {result.skipped.length}.
+          Touched {result.schools.length} schools. Skipped {result.skipped.length}.
           <div className="ops-row-actions" style={{ marginTop: 8 }}>
             <button className="ops-button" onClick={() => void downloadResult()}>Download result xlsx with teacher codes</button>
           </div>
         </div>
       )}
+    </section>
+  )
+}
+
+function ParticipantsPanel({ event, schools }: { event: EventDoc; schools: AdminSchoolView[] }) {
+  const toast = useToast()
+  const [rows, setRows] = useState<ParticipantRow[]>([])
+  const [schoolFilter, setSchoolFilter] = useState('all')
+  const [gradeFilter, setGradeFilter] = useState('all')
+  const [query, setQuery] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const loadParticipants = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const classViews = schools.flatMap((school) => (
+        school.classes.map((classStats) => ({
+          school: school.school,
+          classInfo: classStats.classInfo,
+        }))
+      ))
+      const batches = await Promise.all(classViews.map(async ({ school, classInfo }) => {
+        const participants = await api.listParticipants({ eventId: event.id, schoolId: school.id, classId: classInfo.id })
+        return participants.map((participant): ParticipantRow => ({
+          participant,
+          school,
+          classInfo,
+          grade: gradeFromClassName(classInfo.name),
+        }))
+      }))
+      setRows(batches.flat().sort((a, b) => Date.parse(b.participant.registeredAt) - Date.parse(a.participant.registeredAt)))
+    } catch (err) {
+      const message = getErrorMessage(err)
+      setError(message)
+      toast(message, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadParticipants()
+  }, [event.id, schools])
+
+  const grades = useMemo(() => {
+    const unique = [...new Set(rows.map((row) => row.grade).filter((grade) => grade !== '-'))]
+    return unique.sort((a, b) => Number(a) - Number(b))
+  }, [rows])
+
+  const filteredRows = useMemo(() => {
+    const q = normalizedSearch(query)
+    return rows.filter((row) => {
+      const schoolMatches = schoolFilter === 'all' || row.school.id === schoolFilter
+      const gradeMatches = gradeFilter === 'all' || row.grade === gradeFilter
+      const queryMatches = !q || normalizedSearch(`${row.participant.name} ${row.participant.publicId}`).includes(q)
+      return schoolMatches && gradeMatches && queryMatches
+    })
+  }, [gradeFilter, query, rows, schoolFilter])
+
+  return (
+    <section className="ops-panel">
+      <div className="ops-topbar">
+        <div>
+          <h2>Participants</h2>
+          <p className="ops-subtle">Filter all registered students by school, grade, or name.</p>
+        </div>
+        <button className="ops-button" disabled={loading} onClick={() => void loadParticipants()}>
+          {loading ? 'Loading...' : 'Refresh'}
+        </button>
+      </div>
+      {error && <div className="ops-alert">{error}</div>}
+      <div className="ops-filter-bar participants">
+        <label className="ops-label">School
+          <select className="ops-select" value={schoolFilter} onChange={(event) => setSchoolFilter(event.target.value)}>
+            <option value="all">All schools</option>
+            {schools.map((school) => <option key={school.school.id} value={school.school.id}>{school.school.name}</option>)}
+          </select>
+        </label>
+        <label className="ops-label">Grade
+          <select className="ops-select" value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)}>
+            <option value="all">All grades</option>
+            {grades.map((grade) => <option key={grade} value={grade}>Grade {grade}</option>)}
+          </select>
+        </label>
+        <label className="ops-label">Search
+          <input className="ops-input" value={query} onChange={(event) => setQuery(event.target.value)} />
+        </label>
+      </div>
+      <div className="ops-table-wrap" style={{ marginTop: 12 }}>
+        <table className="ops-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Public ID</th>
+              <th>School</th>
+              <th>Class</th>
+              <th>Status</th>
+              <th>Registered</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredRows.map((row) => (
+              <tr key={row.participant.id}>
+                <td><strong>{row.participant.name}</strong></td>
+                <td><code>{row.participant.publicId}</code></td>
+                <td>{row.school.name}</td>
+                <td>{row.classInfo.name}</td>
+                <td><span className={`ops-pill ${row.participant.status === 'approved' ? 'ok' : row.participant.status === 'pending' ? '' : 'warn'}`}>{statusLabel(row.participant.status)}</span></td>
+                <td>{formatDateTime(row.participant.registeredAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {loading && <p className="ops-subtle"><ShimmerText busy={loading}>Loading participants</ShimmerText></p>}
+      {!loading && filteredRows.length === 0 && <p className="ops-subtle">No participants match the filter.</p>}
     </section>
   )
 }
@@ -777,6 +860,8 @@ function SchoolsPanel({
   const [participantsByClass, setParticipantsByClass] = useState<Record<string, ParticipantDoc[]>>({})
   const [rankingKey, setRankingKey] = useState('')
   const [rankingRows, setRankingRows] = useState<LeaderboardRow[]>([])
+  const [classDrafts, setClassDrafts] = useState<Record<string, string>>({})
+  const [addingClassSchoolId, setAddingClassSchoolId] = useState('')
   const [busySchoolId, setBusySchoolId] = useState('')
   const [loadingTeachersSchoolId, setLoadingTeachersSchoolId] = useState('')
   const [revokingTeacherKey, setRevokingTeacherKey] = useState('')
@@ -837,6 +922,24 @@ function SchoolsPanel({
       toast(message, 'error')
     } finally {
       setBusySchoolId('')
+    }
+  }
+
+  const addClass = async (schoolId: string) => {
+    const name = classDrafts[schoolId]?.trim() ?? ''
+    if (!name) return
+    setAddingClassSchoolId(schoolId)
+    setError('')
+    try {
+      const created = await api.addClass({ eventId: event.id, schoolId }, name)
+      setClassDrafts((current) => ({ ...current, [schoolId]: '' }))
+      await onChanged(`Class added: ${created.name}.`)
+    } catch (err) {
+      const message = getErrorMessage(err)
+      setError(message)
+      toast(message, 'error')
+    } finally {
+      setAddingClassSchoolId('')
     }
   }
 
@@ -913,7 +1016,7 @@ function SchoolsPanel({
       <div className="ops-topbar">
         <div>
           <h2>Schools</h2>
-          <p className="ops-subtle">Search by school name or state. Expand a school to inspect classes and rankings.</p>
+          <p className="ops-subtle">Search by school name or state. Expand a school to add classes, inspect teachers, and view rankings.</p>
         </div>
         <label className="ops-search">Search<input className="ops-input" value={query} onChange={(e) => setQuery(e.target.value)} /></label>
       </div>
@@ -953,7 +1056,7 @@ function SchoolsPanel({
                     </td>
                     <td>{school.school.state ?? ''}</td>
                     <td>
-                      {busySchoolId === schoolId ? <span className="ops-skeleton code" aria-label="Updating teacher code" /> : <code>{school.school.teacherCode}</code>}
+                      <ShimmerText busy={busySchoolId === schoolId}><code>{school.school.teacherCode}</code></ShimmerText>
                     </td>
                     <td>{school.classes.length}</td>
                     <td>{participantCount}</td>
@@ -969,6 +1072,13 @@ function SchoolsPanel({
                   {isExpanded && (
                     <tr>
                       <td colSpan={7}>
+                        <AddClassPanel
+                          busy={addingClassSchoolId === schoolId}
+                          schoolName={school.school.name}
+                          value={classDrafts[schoolId] ?? ''}
+                          onAdd={() => addClass(schoolId)}
+                          onChange={(value) => setClassDrafts((current) => ({ ...current, [schoolId]: value }))}
+                        />
                         <TeacherBindingsPanel
                           teachers={teachersBySchool[schoolId] ?? []}
                           loading={loadingTeachersSchoolId === schoolId}
@@ -1002,6 +1112,39 @@ function SchoolsPanel({
   )
 }
 
+function AddClassPanel({
+  busy,
+  schoolName,
+  value,
+  onChange,
+  onAdd,
+}: {
+  busy: boolean
+  schoolName: string
+  value: string
+  onChange: (value: string) => void
+  onAdd: () => Promise<void>
+}) {
+  return (
+    <section className="ops-nested-section">
+      <div className="ops-topbar compact">
+        <div>
+          <h3>Add class</h3>
+          <p className="ops-subtle">Create a class under {schoolName}.</p>
+        </div>
+      </div>
+      <div className="ops-inline-form">
+        <label className="ops-label">Class name
+          <input className="ops-input" value={value} onChange={(event) => onChange(event.target.value)} />
+        </label>
+        <button className="ops-button primary" disabled={busy || !value.trim()} onClick={() => void onAdd()}>
+          {busy ? 'Adding...' : 'Add class'}
+        </button>
+      </div>
+    </section>
+  )
+}
+
 function TeacherBindingsPanel({
   teachers,
   loading,
@@ -1019,7 +1162,7 @@ function TeacherBindingsPanel({
     <section className="ops-nested-section">
       <div className="ops-topbar compact">
         <h3>Teachers</h3>
-        {loading && <span className="ops-skeleton text" aria-label="Loading teachers" />}
+        {loading && <ShimmerText busy={loading}>Loading teachers</ShimmerText>}
       </div>
       {!loading && teachers.length === 0 ? (
         <p className="ops-subtle">No teachers bound to this school.</p>
@@ -1160,7 +1303,7 @@ function ParticipantTable({
     <section className="ops-nested-section">
       <div className="ops-topbar compact">
         <h3>Participants · {classStats.classInfo.name}</h3>
-        {loading && <span className="ops-skeleton text" aria-label="Loading participants" />}
+        {loading && <ShimmerText busy={loading}>Loading participants</ShimmerText>}
       </div>
       {!loading && participants.length === 0 ? (
         <p className="ops-subtle">No participants registered yet.</p>
