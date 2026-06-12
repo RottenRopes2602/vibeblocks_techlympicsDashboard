@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useSyncExternalStore } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 
 export type LanguageCode = 'en' | 'ms'
@@ -672,16 +672,88 @@ export function useT(): TFunction {
 
 export function LanguageToggle({ className = 'auth-button' }: { className?: string }) {
   const { language, setLanguage: updateLanguage, t } = useI18n()
-  const nextLanguage: LanguageCode = language === 'en' ? 'ms' : 'en'
+  const [open, setOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const languages: Array<{ code: LanguageCode; label: string }> = [
+    { code: 'en', label: 'English' },
+    { code: 'ms', label: 'Bahasa Melayu' },
+  ]
+  const currentLanguage = languages.find((option) => option.code === language) ?? languages[0]
+
+  useEffect(() => {
+    if (!open) return undefined
+    const closeOnOutside = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOnOutside)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [open])
+
   return (
-    <button
-      className={className}
-      type="button"
-      aria-label={t('common.language')}
-      title={t('common.language')}
-      onClick={() => updateLanguage(nextLanguage)}
-    >
-      {language === 'en' ? t('common.malay') : t('common.english')}
-    </button>
+    <div className="auth-language-menu" ref={menuRef}>
+      <button
+        className={`${className} auth-language-toggle`}
+        type="button"
+        aria-label={t('common.language')}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={t('common.language')}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <svg className="auth-language-globe" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+          <circle cx="10" cy="10" r="7.25" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          <path
+            d="M3.25 10h13.5M10 2.75c2 2.05 3 4.47 3 7.25s-1 5.2-3 7.25M10 2.75C8 4.8 7 7.22 7 10s1 5.2 3 7.25"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.5"
+          />
+        </svg>
+        <span>{currentLanguage.label}</span>
+      </button>
+      {open ? (
+        <div className="auth-language-list" role="menu" aria-label={t('common.language')}>
+          {languages.map((option) => {
+            const selected = option.code === language
+            return (
+              <button
+                className="auth-language-option"
+                type="button"
+                role="menuitemradio"
+                aria-checked={selected}
+                key={option.code}
+                onClick={() => {
+                  updateLanguage(option.code)
+                  setOpen(false)
+                }}
+              >
+                <span>{option.label}</span>
+                {selected ? (
+                  <svg className="auth-language-check" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                    <path
+                      d="m4.5 10.5 3.5 3.25 7.5-8"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.5"
+                    />
+                  </svg>
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+    </div>
   )
 }

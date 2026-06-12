@@ -39,6 +39,25 @@ function GoogleIcon() {
   )
 }
 
+function PasswordVisibilityIcon({ hidden }: { hidden: boolean }) {
+  return (
+    <svg className="auth-visibility-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        d="M2.75 12s3.25-6.25 9.25-6.25S21.25 12 21.25 12 18 18.25 12 18.25 2.75 12 2.75 12Z"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
+      <circle cx="12" cy="12" r="2.75" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      {hidden ? (
+        <path d="M4.5 19.5 19.5 4.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+      ) : null}
+    </svg>
+  )
+}
+
 function errorText(error: unknown, t: TFunction): string {
   const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
   if (code === 'auth/user-not-found') return t('auth.noAccount')
@@ -173,7 +192,7 @@ export default function AuthPanel({
               title={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
               onClick={() => setShowPassword((value) => !value)}
             >
-              {showPassword ? '🙈' : '👁'}
+              <PasswordVisibilityIcon hidden={showPassword} />
             </button>
           </div>
         </label>

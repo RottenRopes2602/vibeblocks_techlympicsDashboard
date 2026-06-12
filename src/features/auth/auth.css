@@ -86,6 +86,9 @@
 }
 
 .auth-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 42px;
   border: 1px solid #c4d2e0;
   border-left: 0;
@@ -95,6 +98,12 @@
   cursor: pointer;
   font: inherit;
   line-height: 1;
+}
+
+.auth-visibility-icon {
+  width: 20px;
+  height: 20px;
+  color: currentColor;
 }
 
 .auth-button {
@@ -107,6 +116,65 @@
   font: inherit;
   font-weight: 800;
   padding: 8px 12px;
+}
+
+.auth-language-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.auth-language-toggle {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.auth-language-globe,
+.auth-language-check {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  color: currentColor;
+}
+
+.auth-language-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  min-width: 188px;
+  overflow: hidden;
+  border: 1px solid #cbd7e5;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 14px 34px rgba(16, 32, 47, 0.16);
+  padding: 4px;
+}
+
+.auth-language-option {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #10202f;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.auth-language-option:hover,
+.auth-language-option:focus-visible {
+  background: #eef4fa;
 }
 
 .auth-button.primary {
@@ -352,6 +420,16 @@
   .auth-panel,
   .role-landing {
     padding: 14px;
+  }
+
+  .auth-language-toggle,
+  .auth-language-option {
+    min-height: 44px;
+  }
+
+  .auth-language-list {
+    left: 0;
+    right: auto;
   }
 
   .home-entry-row .auth-button {
