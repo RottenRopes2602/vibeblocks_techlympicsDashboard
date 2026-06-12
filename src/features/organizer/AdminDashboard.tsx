@@ -60,6 +60,26 @@ interface EventForm {
 
 const requiredFields: ImportField[] = ['schoolName']
 const importFields: ImportField[] = ['schoolName', 'level', 'state', 'zone']
+
+// 말레이시아 13주 + 연방직할구 3 (공식 표기)
+const MALAYSIA_STATES = [
+  'Johor',
+  'Kedah',
+  'Kelantan',
+  'Melaka',
+  'Negeri Sembilan',
+  'Pahang',
+  'Perak',
+  'Perlis',
+  'Pulau Pinang',
+  'Sabah',
+  'Sarawak',
+  'Selangor',
+  'Terengganu',
+  'W.P. Kuala Lumpur',
+  'W.P. Labuan',
+  'W.P. Putrajaya',
+]
 const adminTabs: AdminTab[] = ['events', 'import', 'schools', 'participants']
 
 function parseAdminTab(value: string | null): AdminTab {
@@ -751,7 +771,14 @@ function ImportPanel({
               ))}
             </select>
           </label>
-          <label className="ops-label">{t('common.state')}<input className="ops-input" value={schoolForm.state} onChange={(e) => setSchoolForm({ ...schoolForm, state: e.target.value })} /></label>
+          <label className="ops-label">{t('common.state')}
+            <select className="ops-input" value={schoolForm.state} onChange={(e) => setSchoolForm({ ...schoolForm, state: e.target.value })}>
+              <option value="">{t('common.selectState')}</option>
+              {MALAYSIA_STATES.map((state) => (
+                <option key={state} value={state}>{state}</option>
+              ))}
+            </select>
+          </label>
           <label className="ops-label">{t('common.zone')}<input className="ops-input" value={schoolForm.zone} onChange={(e) => setSchoolForm({ ...schoolForm, zone: e.target.value })} /></label>
         </div>
         <div className="ops-row-actions" style={{ marginTop: 12 }}>
