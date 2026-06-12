@@ -4,8 +4,10 @@
 // Spark 구조: 구현 = Firestore 직접 + rules 방어. 시그니처 변경은 Claude 승인 경유.
 // ============================================================
 import type {
+  AdminInviteDoc,
   AttemptMetrics,
   ChallengeSlot,
+  ClassDoc,
   ClassPath,
   EventDoc,
   EventStats,
@@ -22,6 +24,7 @@ import type {
   RoleDoc,
   SchoolPath,
   SubmitResult,
+  TeacherBinding,
   TeacherSchoolView,
 } from './types'
 import { createFirestoreApi } from './firestore'
@@ -60,6 +63,8 @@ export interface CompetitionApi {
   resetJoinCode(c: ClassPath): Promise<string>
   /** v3: 학급코드 활성/비활성 — 비활성 시 신규 참가만 차단 */
   setJoinActive(c: ClassPath, active: boolean): Promise<void>
+  /** v4: 반 추가 — admin + 해당 학교 바인딩 teacher. joinCode 자동 발급 */
+  addClass(s: SchoolPath, name: string): Promise<ClassDoc>
 
   // ---------- 주최측 admin (웹 — CONTRACT §5.3) ----------
   listEvents(): Promise<EventDoc[]>
@@ -79,6 +84,10 @@ export interface CompetitionApi {
   listEventSchools(eventId: string): Promise<OrganizerSchoolView[]>
   resetTeacherCode(s: SchoolPath): Promise<string>
   getEventStats(eventId: string): Promise<EventStats>
+  /** v4: 학교에 바인딩된 교사 목록 (admin/master) */
+  listSchoolTeachers(s: SchoolPath): Promise<TeacherBinding[]>
+  /** v4: 교사 바인딩 해제 (admin/master) */
+  revokeTeacherBinding(s: SchoolPath, uid: string): Promise<void>
 
   // ---------- master 회사 (웹 — CONTRACT §5.4) ----------
   /** master 전용: 주최측(admin) 초대코드 발급 */
@@ -87,6 +96,11 @@ export interface CompetitionApi {
   redeemAdminInvite(code: string): Promise<void>
   listRoles(): Promise<RoleDoc[]>
   revokeRole(uid: string): Promise<void>
+  /** v4: 발급한 초대코드 목록/삭제 (master) */
+  listAdminInvites(): Promise<AdminInviteDoc[]>
+  deleteAdminInvite(code: string): Promise<void>
+  /** v4: 본인 계정 탈퇴 — 바인딩·role 정리 후 Auth 삭제 */
+  deleteMyAccount(): Promise<void>
 
   // ---------- 공통 ----------
   /** 현재 로그인 사용자의 역할 (없으면 null). 익명 세션은 역할 없음 취급 */

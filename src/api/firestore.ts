@@ -20,7 +20,7 @@ import {
 } from 'firebase/firestore'
 import type { CompetitionApi } from './index'
 import { newInviteCode, newJoinCode, newPublicId, newRecoveryCode, newTeacherCode, normalizeCode, sha256Hex } from './codes'
-import { averageSec, compareEntries, isBetter, recordTimeSec } from './scoring'
+import { averageSec, compareEntries, completedCount, isBetter, recordTimeSec } from './scoring'
 import type {
   AttemptDoc,
   BoardBest,
@@ -364,6 +364,7 @@ export function createFirestoreApi(): CompetitionApi {
         name: entry.name,
         status: entry.status,
         bests: publicBests(entry.bests),
+      completedCount: completedCount(entry.bests),
         averageSec: avg,
         attemptsUsed: attemptsUsedFromBests(entry.bests),
       }
@@ -1022,6 +1023,26 @@ export function createFirestoreApi(): CompetitionApi {
       } catch (error) {
         return mapError(error)
       }
+    },
+
+    // ---------- v4 — TODO(vb-116-api-rules-v4): 실구현 + rules ----------
+    async addClass() {
+      throw new Error('NOT_IMPLEMENTED_V4')
+    },
+    async listSchoolTeachers() {
+      throw new Error('NOT_IMPLEMENTED_V4')
+    },
+    async revokeTeacherBinding() {
+      throw new Error('NOT_IMPLEMENTED_V4')
+    },
+    async listAdminInvites() {
+      throw new Error('NOT_IMPLEMENTED_V4')
+    },
+    async deleteAdminInvite() {
+      throw new Error('NOT_IMPLEMENTED_V4')
+    },
+    async deleteMyAccount() {
+      throw new Error('NOT_IMPLEMENTED_V4')
     },
 
     async getMyRole() {

@@ -161,7 +161,8 @@ export interface LeaderboardRow {
   name: string
   status: ParticipantStatus
   bests: Partial<Record<ChallengeSlot, number>> // 도전별 최고기록(초)
-  averageSec: number | null // 3개 평균 — 정렬 기준 (오름차순)
+  completedCount: number // v4 — 완료 종목 수 (1차 정렬 키)
+  averageSec: number | null // v4 — 완료분 평균 (2차 정렬 키)
   attemptsUsed: Record<ChallengeSlot, number>
 }
 
@@ -194,6 +195,18 @@ export interface ClassStats {
 export interface OrganizerSchoolView {
   school: SchoolDoc
   classes: ClassStats[]
+}
+
+export interface TeacherBinding {
+  uid: string
+  email?: string
+  boundAt: string
+}
+
+export interface AdminInviteDoc {
+  code: string
+  usedBy: string | null
+  createdAt: string
 }
 
 export interface EventStats {

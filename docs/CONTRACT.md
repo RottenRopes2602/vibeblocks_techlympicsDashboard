@@ -1,4 +1,11 @@
-# vb-116 공유 계약 (CONTRACT) — v3 (2026-06-12 개정)
+# vb-116 공유 계약 (CONTRACT) — v4 (2026-06-12 2차 개정)
+
+> **v4 변경:**
+> A. **랭킹 정렬 v4** (`scoring.ts`): 완료 종목 수 내림차순 → 완료분 평균 오름차순 → 갱신시각. **미시도 포함 전원 표시** (완료 0 = rank '-', 최하단). LeaderboardRow에 `completedCount` 추가. 무순위제(3개 미완) 폐지.
+> B. api 추가: `addClass`(admin+해당교 teacher) / `listSchoolTeachers`·`revokeTeacherBinding` / `listAdminInvites`·`deleteAdminInvite` / `deleteMyAccount`. mock 구현 완료, firestore = NOT_IMPLEMENTED_V4 스텁(api-rules-v4 담당).
+> C. **email 기록**: bindTeacherSchool·redeemAdminInvite·roles 생성 시 본인 email 저장(+기존 계정 다음 로그인 백필) — Users 화면 표시용.
+> D. 복원 로직: 거절(rejected)·탈퇴(withdrawn) 참가는 자동 복원 대상에서 제외 — 최신 유효 참가 우선, 없으면 신규 가입 흐름.
+> E. grade 입력 폐지(앱) — 학급명이 학년 정보. 비번 재설정(sendPasswordResetEmail)·계정 탈퇴 동선 추가.
 
 > **이 문서가 모든 task의 단일 진실원.** 여기 어긋나는 구현이 버그다.
 > 기획 원문: HQ `_ops/projects/vb-116-fc1-competition-platform.md`

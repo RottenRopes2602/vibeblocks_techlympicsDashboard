@@ -252,7 +252,7 @@ service cloud.firestore {
         && request.resource.data.statusHistory == []
         && timestampField('registeredAt')
         && eventNotFrozen(eventId)
-        && classInfo.joinActive == true;
+        && (!('joinActive' in classInfo) || classInfo.joinActive == true); // 결손 = 활성 (v3 이전 문서 호환)
     }
     function validTeacherStatusBoardUpdate() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])

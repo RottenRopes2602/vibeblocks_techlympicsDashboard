@@ -25,7 +25,7 @@ import type {
 } from './types'
 import { CHALLENGE_SLOTS } from './types'
 import { newJoinCode, newPublicId, newRecoveryCode, newTeacherCode, newInviteCode, normalizeCode, sha256Hex } from './codes'
-import { averageSec, compareEntries, isBetter, recordTimeSec } from './scoring'
+import { averageSec, compareEntries, completedCount, isBetter, recordTimeSec } from './scoring'
 
 interface Store {
   events: EventDoc[]
@@ -276,17 +276,18 @@ export function createMockApi(): CompetitionApi {
         .filter((e) => e.status !== 'withdrawn')
         .filter((e) => (opts?.includePending ? e.status !== 'rejected' : e.status === 'approved'))
         .sort(compareEntries)
-      const ranked = entries.filter((e) => averageSec(e.bests) !== null)
+      const ranked = entries.filter((e) => completedCount(e.bests) > 0)
       const rows: LeaderboardRow[] = entries.map((e) => {
         const avg = averageSec(e.bests)
         return {
-          rank: avg === null ? null : ranked.indexOf(e) + 1,
+          rank: completedCount(e.bests) > 0 ? ranked.indexOf(e) + 1 : null,
           publicId: e.publicId,
           name: e.name,
           status: e.status,
           bests: Object.fromEntries(
             Object.entries(e.bests).map(([k, v]) => [k, v!.timeSec]),
           ) as Partial<Record<ChallengeSlot, number>>,
+          completedCount: completedCount(e.bests),
           averageSec: avg,
           attemptsUsed: usedBySlot(e.participantId),
         }
@@ -304,6 +305,7 @@ export function createMockApi(): CompetitionApi {
             name: p.name,
             status: p.status,
             bests: {},
+            completedCount: 0,
             averageSec: null,
             attemptsUsed: usedBySlot(p.id),
           }),
@@ -334,6 +336,54 @@ export function createMockApi(): CompetitionApi {
       const target = s.classes.find((x) => x.id === c.classId)
       if (!target) throw new Error('CLASS_NOT_FOUND')
       target.joinActive = active
+      return delay(undefined)
+    },
+
+    async addClass(sp: SchoolPath, name: string) {
+      requireRole(['teacher', 'admin', 'master'])
+      const school = s.schools.find((x) => x.id === sp.schoolId)
+      if (!school) throw new Error('SCHOOL_NOT_FOUND')
+      if (s.classes.some((x) => x.schoolId === sp.schoolId && x.name === name.trim())) throw new Error('DUPLICATE_CLASS')
+      const c = {
+        id: `cls-${Math.random().toString(36).slice(2, 8)}`,
+        eventId: sp.eventId,
+        schoolId: sp.schoolId,
+        name: name.trim(),
+        joinCode: newJoinCode(),
+        joinActive: true,
+        createdAt: now(),
+      }
+      s.classes.push(c)
+      return delay(c)
+    },
+
+    async listSchoolTeachers(sp: SchoolPath) {
+      requireRole(['admin', 'master'])
+      void sp
+      return delay([{ uid: 'mock-teacher-1', email: 'teacher@mock.dev', boundAt: now() }])
+    },
+
+    async revokeTeacherBinding(sp: SchoolPath, uidToRevoke: string) {
+      requireRole(['admin', 'master'])
+      void sp
+      void uidToRevoke
+      return delay(undefined)
+    },
+
+    async listAdminInvites() {
+      requireRole(['master'])
+      return delay([...s.invites].map((code) => ({ code, usedBy: null, createdAt: now() })))
+    },
+
+    async deleteAdminInvite(code: string) {
+      requireRole(['master'])
+      s.invites.delete(normalizeCode(code))
+      return delay(undefined)
+    },
+
+    async deleteMyAccount() {
+      s.myRole = null
+      s.mySchoolIds = []
       return delay(undefined)
     },
 
