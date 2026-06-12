@@ -501,10 +501,22 @@ export function createFirestoreApi(): CompetitionApi {
           classId: mapping.classId,
           participantId: mapping.participantId,
         }
-        const participant = await readParticipant(path)
+        // v6 수정: ① 이미 내 소유면 claim/rebind 생략(재복원 시 claims 재생성 거부 버그)
+        // ② 새 기기는 rebind 전 participant를 읽을 수 없음(owner-only) — claim→rebind→read 순서
+        let participant = null as Awaited<ReturnType<typeof readParticipant>> | null
+        try {
+          participant = await readParticipant(path)
+        } catch {
+          participant = null
+        }
+        if (!participant || participant.ownerUid !== uid) {
+          const claimRef = doc(db, 'recoveryCodes', recoveryHash, 'claims', uid)
+          const claimSnap = await getDoc(claimRef)
+          if (!claimSnap.exists()) await setDoc(claimRef, { claimedAt: serverTimestamp() })
+          await updateDoc(participantRef(path), { ownerUid: uid })
+          participant = await readParticipant(path)
+        }
         if (participant.status === 'rejected') throw new Error('REJECTED')
-        await setDoc(doc(db, 'recoveryCodes', recoveryHash, 'claims', uid), { claimedAt: serverTimestamp() })
-        await updateDoc(participantRef(path), { ownerUid: uid })
         const classSnap = await getDoc(classRef(path))
         if (!classSnap.exists()) throw new Error('CLASS_NOT_FOUND')
         const info = await readJoinInfo(asClass(classSnap, path.eventId, path.schoolId).joinCode)
