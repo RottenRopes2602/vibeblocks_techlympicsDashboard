@@ -22,6 +22,7 @@ import type {
   ParticipantStatus,
   ResumeResult,
   RoleDoc,
+  SchoolLevel,
   SchoolPath,
   SubmitResult,
   TeacherBinding,
@@ -63,8 +64,10 @@ export interface CompetitionApi {
   resetJoinCode(c: ClassPath): Promise<string>
   /** v3: 학급코드 활성/비활성 — 비활성 시 신규 참가만 차단 */
   setJoinActive(c: ClassPath, active: boolean): Promise<void>
-  /** v4: 반 추가 — admin + 해당 학교 바인딩 teacher. joinCode 자동 발급 */
-  addClass(s: SchoolPath, name: string): Promise<ClassDoc>
+  /** v4: 반 추가 — admin + 해당 학교 바인딩 teacher. joinCode 자동 발급. v5: grade = 학년 (school.level 기준) */
+  addClass(s: SchoolPath, name: string, grade?: number): Promise<ClassDoc>
+  /** v5: 학교 등급 설정 — admin/master + 해당 학교 바인딩 teacher (level 미설정 학교 후설정용) */
+  setSchoolLevel(s: SchoolPath, level: SchoolLevel): Promise<void>
 
   // ---------- 주최측 admin (웹 — CONTRACT §5.3) ----------
   listEvents(): Promise<EventDoc[]>

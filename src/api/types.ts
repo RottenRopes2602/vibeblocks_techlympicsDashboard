@@ -6,6 +6,14 @@
 
 // teacher=교사 / admin=주최측 / master=회사(희용·HQ)
 export type Role = 'teacher' | 'admin' | 'master'
+
+// 말레이시아 학교 체계 — primary=Sekolah Rendah(Standard/Tahun 1-6) / secondary=Sekolah Menengah(Form/Tingkatan 1-5)
+export type SchoolLevel = 'primary' | 'secondary'
+export const SCHOOL_LEVELS: SchoolLevel[] = ['primary', 'secondary']
+export const GRADES_BY_LEVEL: Record<SchoolLevel, number[]> = {
+  primary: [1, 2, 3, 4, 5, 6],
+  secondary: [1, 2, 3, 4, 5],
+}
 export type ParticipantStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn' // 가등록/등록/거절/탈퇴(v3 — 기록·시도 보존, 랭킹 제외)
 export type Visibility = 'code-only' | 'public-masked' | 'public' // v1 = code-only 고정
 export type SolveMode = 'ai' | 'block'
@@ -50,6 +58,7 @@ export interface SchoolDoc {
   id: string
   eventId: string
   name: string
+  level?: SchoolLevel // v5 — 신규 생성은 필수 입력, 기존 문서는 콘솔에서 후설정
   state?: string
   zone?: string
   teacherCode: string // 'T-XXXXXXXX' — 교사 가입 게이트
@@ -61,6 +70,7 @@ export interface ClassDoc {
   eventId: string
   schoolId: string
   name: string
+  grade?: number // v5 — 학년 (school.level 기준: primary=Standard 1-6 / secondary=Form 1-5)
   joinCode: string // 6자 — 학생 앱 참가 capability (v3: 웹 입력 없음 — QR/앱 전용)
   joinActive: boolean // false = 신규 참가 차단 (v3 — 기존 참가자·기록은 무관)
   createdAt: string
@@ -175,6 +185,7 @@ export interface TeacherSchoolView {
 export interface ImportRow {
   schoolName: string
   className?: string // v5: 벌크 업로드 = 학교 전용 (반은 개별 추가) — 없으면 학교만 생성
+  level?: SchoolLevel // v5 — 학교 등급
   state?: string
   zone?: string
 }

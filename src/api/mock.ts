@@ -20,10 +20,11 @@ import type {
   ParticipantStatus,
   RoleDoc,
   SchoolDoc,
+  SchoolLevel,
   SchoolPath,
   TeacherSchoolView,
 } from './types'
-import { CHALLENGE_SLOTS } from './types'
+import { CHALLENGE_SLOTS, GRADES_BY_LEVEL } from './types'
 import { newJoinCode, newPublicId, newRecoveryCode, newTeacherCode, newInviteCode, normalizeCode, sha256Hex } from './codes'
 import { averageSec, compareEntries, completedCount, isBetter, recordTimeSec } from './scoring'
 
@@ -65,13 +66,15 @@ function seed(): Store {
     createdAt: now(),
   }
   const schools: SchoolDoc[] = [
-    { id: 'sch-kedah', eventId: event.id, name: 'Kedah Legacy School', state: 'Kedah', teacherCode: 'T-KEDAH234', createdAt: now() },
-    { id: 'sch-sel', eventId: event.id, name: 'Selangor Pilot School', state: 'Selangor', teacherCode: 'T-SEL23456', createdAt: now() },
+    { id: 'sch-kedah', eventId: event.id, name: 'Kedah Legacy School', level: 'primary', state: 'Kedah', teacherCode: 'T-KEDAH234', createdAt: now() },
+    { id: 'sch-sel', eventId: event.id, name: 'Selangor Pilot School', level: 'secondary', state: 'Selangor', teacherCode: 'T-SEL23456', createdAt: now() },
+    // level 미설정 legacy 학교 — 후설정 UI 확인용
+    { id: 'sch-joh', eventId: event.id, name: 'Johor Heritage School', state: 'Johor', teacherCode: 'T-JOH23456', createdAt: now() },
   ]
   const classes: ClassDoc[] = [
-    { id: 'cls-k3a', eventId: event.id, schoolId: 'sch-kedah', name: '3 Amanah', joinCode: 'KEDAH7', joinActive: true, createdAt: now() },
-    { id: 'cls-k3b', eventId: event.id, schoolId: 'sch-kedah', name: '3 Bestari', joinCode: 'KEDAH8', joinActive: true, createdAt: now() },
-    { id: 'cls-s5a', eventId: event.id, schoolId: 'sch-sel', name: '5 Cerdik', joinCode: 'SELFC2', joinActive: true, createdAt: now() },
+    { id: 'cls-k3a', eventId: event.id, schoolId: 'sch-kedah', name: '3 Amanah', grade: 3, joinCode: 'KEDAH7', joinActive: true, createdAt: now() },
+    { id: 'cls-k3b', eventId: event.id, schoolId: 'sch-kedah', name: '3 Bestari', grade: 3, joinCode: 'KEDAH8', joinActive: true, createdAt: now() },
+    { id: 'cls-s5a', eventId: event.id, schoolId: 'sch-sel', name: '5 Cerdik', grade: 5, joinCode: 'SELFC2', joinActive: true, createdAt: now() },
   ]
   const names = ['Aiman bin Khairul', 'Nurul Izzah', 'Lim Wei Jun', 'Priya a/p Kumar', 'Hafiz bin Roslan', 'Tan Mei Ling']
   const participants: ParticipantDoc[] = names.map((name, i) => ({
@@ -339,22 +342,32 @@ export function createMockApi(): CompetitionApi {
       return delay(undefined)
     },
 
-    async addClass(sp: SchoolPath, name: string) {
+    async addClass(sp: SchoolPath, name: string, grade?: number) {
       requireRole(['teacher', 'admin', 'master'])
       const school = s.schools.find((x) => x.id === sp.schoolId)
       if (!school) throw new Error('SCHOOL_NOT_FOUND')
       if (s.classes.some((x) => x.schoolId === sp.schoolId && x.name === name.trim())) throw new Error('DUPLICATE_CLASS')
-      const c = {
+      if (grade !== undefined && (!school.level || !GRADES_BY_LEVEL[school.level].includes(grade))) throw new Error('INVALID_GRADE')
+      const c: ClassDoc = {
         id: `cls-${Math.random().toString(36).slice(2, 8)}`,
         eventId: sp.eventId,
         schoolId: sp.schoolId,
         name: name.trim(),
+        grade,
         joinCode: newJoinCode(),
         joinActive: true,
         createdAt: now(),
       }
       s.classes.push(c)
       return delay(c)
+    },
+
+    async setSchoolLevel(sp: SchoolPath, level: SchoolLevel) {
+      requireRole(['teacher', 'admin', 'master'])
+      const school = s.schools.find((x) => x.id === sp.schoolId)
+      if (!school) throw new Error('SCHOOL_NOT_FOUND')
+      school.level = level
+      return delay(undefined)
     },
 
     async listSchoolTeachers(sp: SchoolPath) {
@@ -509,6 +522,7 @@ export function createMockApi(): CompetitionApi {
             id: `sch-${Math.random().toString(36).slice(2, 8)}`,
             eventId,
             name: row.schoolName.trim(),
+            level: row.level,
             state: row.state,
             zone: row.zone,
             teacherCode: newTeacherCode(),

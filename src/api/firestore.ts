@@ -45,6 +45,7 @@ import type {
   TeacherSchoolView,
   AdminInviteDoc,
 } from './types'
+import { GRADES_BY_LEVEL } from './types'
 import { auth, db } from '../lib/firebase'
 
 type CodeMapping = {
@@ -112,6 +113,7 @@ function asSchool(snap: QueryDocumentSnapshot<DocumentData> | { id: string; data
     id: snap.id,
     eventId: data.eventId ?? eventId,
     name: data.name,
+    level: data.level,
     state: data.state,
     zone: data.zone,
     teacherCode: data.teacherCode ?? '',
@@ -126,6 +128,7 @@ function asClass(snap: QueryDocumentSnapshot<DocumentData> | { id: string; data(
     eventId: data.eventId ?? eventId,
     schoolId: data.schoolId ?? schoolId,
     name: data.name,
+    grade: data.grade,
     joinCode: data.joinCode,
     joinActive: data.joinActive ?? true,
     createdAt: toIso(data.createdAt),
@@ -812,6 +815,7 @@ export function createFirestoreApi(): CompetitionApi {
               id: ref.id,
               eventId,
               name: schoolName,
+              level: row.level,
               state: row.state?.trim() || undefined,
               zone: row.zone?.trim() || undefined,
               teacherCode,
@@ -1084,7 +1088,7 @@ export function createFirestoreApi(): CompetitionApi {
       }
     },
 
-    async addClass(path, name) {
+    async addClass(path, name, grade) {
       try {
         await ensureUser()
         const trimmedName = name.trim()
@@ -1092,6 +1096,7 @@ export function createFirestoreApi(): CompetitionApi {
         const schoolSnap = await getDoc(schoolRef(path))
         if (!schoolSnap.exists()) throw new Error('SCHOOL_NOT_FOUND')
         const school = asSchool(schoolSnap, path.eventId)
+        if (grade !== undefined && (!school.level || !GRADES_BY_LEVEL[school.level].includes(grade))) throw new Error('INVALID_GRADE')
         const classSnaps = await getDocs(collection(db, 'events', path.eventId, 'schools', path.schoolId, 'classes'))
         if (classSnaps.docs.some((snap) => String(snap.data().name).trim() === trimmedName)) throw new Error('DUPLICATE_CLASS')
 
@@ -1102,12 +1107,13 @@ export function createFirestoreApi(): CompetitionApi {
           eventId: path.eventId,
           schoolId: path.schoolId,
           name: trimmedName,
+          grade,
           joinCode,
           joinActive: true,
           createdAt: nowIso(),
         }
         const batch = writeBatch(db)
-        batch.set(classDoc, { ...classInfo, createdAt: serverTimestamp() })
+        batch.set(classDoc, clean({ ...classInfo, createdAt: serverTimestamp() }))
         batch.set(doc(db, 'joinCodes', joinCode), clean({
           eventId: path.eventId,
           schoolId: path.schoolId,
@@ -1120,6 +1126,14 @@ export function createFirestoreApi(): CompetitionApi {
         }))
         await batch.commit()
         return classInfo
+      } catch (error) {
+        return mapError(error)
+      }
+    },
+    async setSchoolLevel(path, level) {
+      try {
+        await ensureUser()
+        await updateDoc(schoolRef(path), { level })
       } catch (error) {
         return mapError(error)
       }

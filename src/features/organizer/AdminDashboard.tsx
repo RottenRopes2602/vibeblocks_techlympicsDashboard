@@ -13,8 +13,11 @@ import type {
   ImportRow,
   LeaderboardRow,
   ParticipantDoc,
+  SchoolLevel,
   TeacherBinding,
 } from '../../api/types'
+import { GRADES_BY_LEVEL, SCHOOL_LEVELS } from '../../api/types'
+import { formatGrade, levelLabel } from '../../lib/grade'
 import { ShimmerText } from '../../lib/Shimmer'
 import type { TFunction } from '../../lib/i18n'
 import { useT } from '../../lib/i18n'
@@ -23,7 +26,7 @@ import { sampleImportRows } from './fixtures/sampleImportRows'
 import './admin.css'
 
 type AdminTab = 'events' | 'import' | 'schools' | 'participants'
-type ImportField = 'schoolName' | 'state' | 'zone'
+type ImportField = 'schoolName' | 'level' | 'state' | 'zone'
 type AdminSchoolView = Awaited<ReturnType<typeof api.listEventSchools>>[number]
 type SearchParamSetter = ReturnType<typeof useSearchParams>[1]
 
@@ -56,7 +59,7 @@ interface EventForm {
 }
 
 const requiredFields: ImportField[] = ['schoolName']
-const importFields: ImportField[] = ['schoolName', 'state', 'zone']
+const importFields: ImportField[] = ['schoolName', 'level', 'state', 'zone']
 const adminTabs: AdminTab[] = ['events', 'import', 'schools', 'participants']
 
 function parseAdminTab(value: string | null): AdminTab {
@@ -89,8 +92,18 @@ function closeQueryModal(searchParams: URLSearchParams, setSearchParams: SearchP
 
 function fieldLabel(field: ImportField, t: TFunction): string {
   if (field === 'schoolName') return t('common.schoolName')
+  if (field === 'level') return t('common.schoolLevel')
   if (field === 'state') return t('common.state')
   return t('common.zone')
+}
+
+// 자유 입력 셀 → SchoolLevel (EN/BM 표기 허용)
+function parseLevelCell(value: string): SchoolLevel | undefined {
+  const v = value.trim().toLowerCase()
+  if (!v) return undefined
+  if (v.includes('primary') || v.includes('rendah')) return 'primary'
+  if (v.includes('secondary') || v.includes('menengah')) return 'secondary'
+  return undefined
 }
 
 const fallbackChallenges: ChallengeDef[] = [
@@ -143,6 +156,7 @@ function pickInitialMapping(headers: string[]): Record<ImportField, string> {
     headers.find((header) => candidates.some((candidate) => header.toLowerCase().replace(/\s+/g, '').includes(candidate))) ?? ''
   return {
     schoolName: findHeader(['school', 'schoolname', 'nama sekolah', 'sekolah']),
+    level: findHeader(['level', 'peringkat']),
     state: findHeader(['state', 'negeri']),
     zone: findHeader(['zone', 'zon']),
   }
@@ -154,15 +168,18 @@ function buildPreview(rows: string[][], mapping: Record<ImportField, string>, se
   const seen = new Map<string, number>()
   return body.map((row, bodyIndex) => {
     const source = Object.fromEntries(headers.map((header, i) => [header, normalizedCell(row[i])]))
+    const levelCell = normalizedCell(source[mapping.level])
     const mapped: ImportRow = {
       schoolName: normalizedCell(source[mapping.schoolName]),
+      level: parseLevelCell(levelCell),
       state: normalizedCell(source[mapping.state]) || undefined,
       zone: normalizedCell(source[mapping.zone]) || undefined,
     }
     const warnings: string[] = []
     requiredFields.forEach((field) => {
-      if (!mapped[field]?.trim()) warnings.push(t('admin.fieldEmpty', { field: fieldLabel(field, t) }))
+      if (!String(mapped[field] ?? '').trim()) warnings.push(t('admin.fieldEmpty', { field: fieldLabel(field, t) }))
     })
+    if (levelCell && !mapped.level) warnings.push(t('admin.invalidLevel', { value: levelCell }))
     const dupKey = mapped.schoolName.toLowerCase()
     if (mapped.schoolName) {
       const first = seen.get(dupKey)
@@ -204,6 +221,7 @@ function downloadResultWorkbook(rows: PreviewRow[], schools: AdminSchoolView[]) 
     return {
       ...row.source,
       schoolName: row.mapped.schoolName,
+      level: row.mapped.level ?? '',
       state: row.mapped.state ?? '',
       zone: row.mapped.zone ?? '',
       teacherCode: school?.school.teacherCode ?? '',
@@ -630,9 +648,9 @@ function ImportPanel({
   const toast = useToast()
   const t = useT()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [schoolForm, setSchoolForm] = useState({ schoolName: '', state: '', zone: '' })
+  const [schoolForm, setSchoolForm] = useState({ schoolName: '', level: '' as SchoolLevel | '', state: '', zone: '' })
   const [workbook, setWorkbook] = useState<ParsedWorkbook | null>(null)
-  const [mapping, setMapping] = useState<Record<ImportField, string>>({ schoolName: '', state: '', zone: '' })
+  const [mapping, setMapping] = useState<Record<ImportField, string>>({ schoolName: '', level: '', state: '', zone: '' })
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [result, setResult] = useState<ImportResult | null>(null)
   const [resultRows, setResultRows] = useState<PreviewRow[]>([])
@@ -673,10 +691,11 @@ function ImportPanel({
     try {
       const response = await api.importSchools(event.id, [{
         schoolName: schoolForm.schoolName.trim(),
+        level: schoolForm.level || undefined,
         state: schoolForm.state.trim() || undefined,
         zone: schoolForm.zone.trim() || undefined,
       }])
-      setSchoolForm({ schoolName: '', state: '', zone: '' })
+      setSchoolForm({ schoolName: '', level: '', state: '', zone: '' })
       await onImported(t('admin.schoolImportFinished', { schools: response.schools.length, skipped: response.skipped.length }))
     } catch (err) {
       const message = getErrorMessage(err)
@@ -724,6 +743,14 @@ function ImportPanel({
         <h3>{t('admin.addSchool')}</h3>
         <div className="ops-form three">
           <label className="ops-label">{t('common.schoolName')}<input className="ops-input" value={schoolForm.schoolName} onChange={(e) => setSchoolForm({ ...schoolForm, schoolName: e.target.value })} /></label>
+          <label className="ops-label">{t('common.schoolLevel')}
+            <select className="ops-input" value={schoolForm.level} onChange={(e) => setSchoolForm({ ...schoolForm, level: e.target.value as SchoolLevel | '' })}>
+              <option value="">{t('common.selectLevel')}</option>
+              {SCHOOL_LEVELS.map((level) => (
+                <option key={level} value={level}>{levelLabel(level, t)}</option>
+              ))}
+            </select>
+          </label>
           <label className="ops-label">{t('common.state')}<input className="ops-input" value={schoolForm.state} onChange={(e) => setSchoolForm({ ...schoolForm, state: e.target.value })} /></label>
           <label className="ops-label">{t('common.zone')}<input className="ops-input" value={schoolForm.zone} onChange={(e) => setSchoolForm({ ...schoolForm, zone: e.target.value })} /></label>
         </div>
@@ -788,6 +815,7 @@ function ImportPanel({
                   <tr>
                     <th>{t('common.select')}</th>
                     <th>{t('common.school')}</th>
+                    <th>{t('admin.levelColumn')}</th>
                     <th>{t('common.state')}</th>
                     <th>{t('common.zone')}</th>
                     <th>{t('common.validation')}</th>
@@ -803,6 +831,7 @@ function ImportPanel({
                         setSelected(next)
                       }} /></td>
                       <td>{row.mapped.schoolName}</td>
+                      <td>{row.mapped.level ? levelLabel(row.mapped.level, t) : ''}</td>
                       <td>{row.mapped.state}</td>
                       <td>{row.mapped.zone}</td>
                       <td>{row.warnings.length ? row.warnings.map((warning) => <span className="ops-pill warn" key={warning}>{warning}</span>) : <span className="ops-pill ok">{t('common.ready')}</span>}</td>
@@ -1002,6 +1031,7 @@ function SchoolsPanel({
   const [participantsByClass, setParticipantsByClass] = useState<Record<string, ParticipantDoc[]>>({})
   const [rankingRows, setRankingRows] = useState<LeaderboardRow[]>([])
   const [classDrafts, setClassDrafts] = useState<Record<string, string>>({})
+  const [gradeDrafts, setGradeDrafts] = useState<Record<string, string>>({})
   const [addingClassSchoolId, setAddingClassSchoolId] = useState('')
   const [busySchoolId, setBusySchoolId] = useState('')
   const [loadingTeachersSchoolId, setLoadingTeachersSchoolId] = useState('')
@@ -1088,14 +1118,28 @@ function SchoolsPanel({
     }
   }
 
+  const setLevel = async (schoolId: string, level: SchoolLevel) => {
+    setError('')
+    try {
+      await api.setSchoolLevel({ eventId: event.id, schoolId }, level)
+      await onChanged(levelLabel(level, t))
+    } catch (err) {
+      const message = getErrorMessage(err)
+      setError(message)
+      toast(message, 'error')
+    }
+  }
+
   const addClass = async (schoolId: string) => {
     const name = classDrafts[schoolId]?.trim() ?? ''
     if (!name) return
     setAddingClassSchoolId(schoolId)
     setError('')
     try {
-      const created = await api.addClass({ eventId: event.id, schoolId }, name)
+      const grade = gradeDrafts[schoolId] ? Number(gradeDrafts[schoolId]) : undefined
+      const created = await api.addClass({ eventId: event.id, schoolId }, name, grade)
       setClassDrafts((current) => ({ ...current, [schoolId]: '' }))
+      setGradeDrafts((current) => ({ ...current, [schoolId]: '' }))
       await onChanged(t('teacher.classAdded', { className: created.name }))
     } catch (err) {
       const message = getErrorMessage(err)
@@ -1220,6 +1264,7 @@ function SchoolsPanel({
             <tr>
               <th aria-label={t('admin.expand')}></th>
               <th>{t('common.school')}</th>
+              <th>{t('admin.levelColumn')}</th>
               <th>{t('common.state')}</th>
               <th>{t('common.teacherCode')}</th>
               <th>{t('common.classes')}</th>
@@ -1247,6 +1292,23 @@ function SchoolsPanel({
                     <td>
                       <strong>{school.school.name}</strong>
                     </td>
+                    <td>
+                      {school.school.level ? (
+                        levelLabel(school.school.level, t)
+                      ) : (
+                        <select
+                          className="ops-input"
+                          aria-label={t('common.schoolLevel')}
+                          value=""
+                          onChange={(e) => e.target.value && void setLevel(schoolId, e.target.value as SchoolLevel)}
+                        >
+                          <option value="">{t('common.selectLevel')}</option>
+                          {SCHOOL_LEVELS.map((level) => (
+                            <option key={level} value={level}>{levelLabel(level, t)}</option>
+                          ))}
+                        </select>
+                      )}
+                    </td>
                     <td>{school.school.state ?? ''}</td>
                     <td>
                       <ShimmerText busy={busySchoolId === schoolId}><code>{school.school.teacherCode}</code></ShimmerText>
@@ -1264,13 +1326,16 @@ function SchoolsPanel({
                   </tr>
                   {isExpanded && (
                     <tr>
-                      <td className="ops-expanded-cell" colSpan={7}>
+                      <td className="ops-expanded-cell" colSpan={8}>
                         <AddClassPanel
                           busy={addingClassSchoolId === schoolId}
                           schoolName={school.school.name}
+                          schoolLevel={school.school.level}
                           value={classDrafts[schoolId] ?? ''}
+                          grade={gradeDrafts[schoolId] ?? ''}
                           onAdd={() => addClass(schoolId)}
                           onChange={(value) => setClassDrafts((current) => ({ ...current, [schoolId]: value }))}
+                          onGradeChange={(value) => setGradeDrafts((current) => ({ ...current, [schoolId]: value }))}
                         />
                         <TeacherBindingsPanel
                           teachers={teachersBySchool[schoolId] ?? []}
@@ -1318,14 +1383,20 @@ function SchoolsPanel({
 function AddClassPanel({
   busy,
   schoolName,
+  schoolLevel,
   value,
+  grade,
   onChange,
+  onGradeChange,
   onAdd,
 }: {
   busy: boolean
   schoolName: string
+  schoolLevel?: SchoolLevel
   value: string
+  grade: string
   onChange: (value: string) => void
+  onGradeChange: (value: string) => void
   onAdd: () => Promise<void>
 }) {
   const t = useT()
@@ -1340,6 +1411,14 @@ function AddClassPanel({
       <div className="ops-inline-form">
         <label className="ops-label">{t('common.className')}
           <input className="ops-input" value={value} onChange={(event) => onChange(event.target.value)} />
+        </label>
+        <label className="ops-label">{t('common.grade')}
+          <select className="ops-input" value={grade} onChange={(event) => onGradeChange(event.target.value)} disabled={!schoolLevel}>
+            <option value="">{schoolLevel ? t('common.noGrade') : t('teacher.setLevelFirst')}</option>
+            {(schoolLevel ? GRADES_BY_LEVEL[schoolLevel] : []).map((option) => (
+              <option key={option} value={option}>{formatGrade(schoolLevel, option, t)}</option>
+            ))}
+          </select>
         </label>
         <button className="ops-button primary" disabled={busy || !value.trim()} onClick={() => void onAdd()}>
           {busy ? t('teacher.adding') : t('teacher.addClass')}
@@ -1459,7 +1538,12 @@ function ClassList({
                       {classExpanded ? '▾' : '▸'}
                     </button>
                   </td>
-                  <td>{classStats.classInfo.name}</td>
+                  <td>
+                    {classStats.classInfo.name}
+                    {typeof classStats.classInfo.grade === 'number' ? (
+                      <span className="ops-pill" style={{ marginLeft: 6 }}>{formatGrade(school.school.level, classStats.classInfo.grade, t)}</span>
+                    ) : null}
+                  </td>
                   <td>{classStats.participantCount}</td>
                   <td>{classStats.approvedCount}</td>
                   <td>{classStats.submittedCount}</td>

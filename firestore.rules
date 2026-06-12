@@ -224,20 +224,33 @@ service cloud.firestore {
     }
     function validSchoolWrite(eventId, schoolId) {
       return request.resource.data.keys().hasOnly([
-          'id', 'eventId', 'name', 'state', 'zone', 'teacherCode', 'createdAt'
+          'id', 'eventId', 'name', 'level', 'state', 'zone', 'teacherCode', 'createdAt'
         ])
         && request.resource.data.id == schoolId
         && request.resource.data.eventId == eventId
         && request.resource.data.name is string
+        && validSchoolLevelValue()
         && request.resource.data.teacherCode is string
         && timestampField('createdAt');
     }
+    // v6: 말레이시아 학교 등급 — primary(Standard 1-6) / secondary(Form 1-5)
+    function validSchoolLevelValue() {
+      return !request.resource.data.keys().hasAny(['level'])
+        || request.resource.data.level in ['primary', 'secondary'];
+    }
+    // v6: 바인딩 교사의 level 후설정 — level 키만 변경 허용
+    function validSchoolLevelUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['level'])
+        && request.resource.data.level in ['primary', 'secondary'];
+    }
     function validClassWrite(eventId, schoolId, classId) {
-      return request.resource.data.keys().hasOnly(['id', 'eventId', 'schoolId', 'name', 'joinCode', 'joinActive', 'createdAt'])
+      return request.resource.data.keys().hasOnly(['id', 'eventId', 'schoolId', 'name', 'grade', 'joinCode', 'joinActive', 'createdAt'])
         && request.resource.data.id == classId
         && request.resource.data.eventId == eventId
         && request.resource.data.schoolId == schoolId
         && request.resource.data.name is string
+        && (!request.resource.data.keys().hasAny(['grade'])
+          || (request.resource.data.grade is int && request.resource.data.grade >= 1 && request.resource.data.grade <= 6))
         && request.resource.data.joinCode is string
         && request.resource.data.joinActive is bool
         && timestampField('createdAt');
@@ -379,6 +392,8 @@ service cloud.firestore {
         allow get: if isSchoolTeacher(eventId, schoolId) || isAdmin();
         allow list: if isAdmin();
         allow create, update: if isAdmin() && validSchoolWrite(eventId, schoolId);
+        // v6: 바인딩 교사는 level 후설정만 가능
+        allow update: if isSchoolTeacher(eventId, schoolId) && validSchoolLevelUpdate();
         allow delete: if false;
 
         match /teachers/{uid} {

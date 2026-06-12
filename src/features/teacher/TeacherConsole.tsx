@@ -11,8 +11,12 @@ import type {
   ParticipantPath,
   ParticipantStatus,
   RoleDoc,
+  SchoolDoc,
+  SchoolLevel,
   TeacherSchoolView,
 } from '../../api/types'
+import { GRADES_BY_LEVEL, SCHOOL_LEVELS } from '../../api/types'
+import { formatGrade, levelLabel } from '../../lib/grade'
 import AuthHeader from '../auth/AuthHeader'
 import TeacherCodeGate from '../auth/TeacherCodeGate'
 import { useAuthSession } from '../auth/session'
@@ -57,15 +61,21 @@ function classGrade(className: string): number | 'other' {
   return Number.isFinite(grade) && grade > 0 ? grade : 'other'
 }
 
+// v6: grade 필드 우선, 없으면 학급명 앞자리 파싱(legacy)
+function classGradeOf(classInfo: ClassDoc): number | 'other' {
+  if (typeof classInfo.grade === 'number') return classInfo.grade
+  return classGrade(classInfo.name)
+}
+
 function gradeValue(classInfo: ClassDoc): GradeFilter {
-  const grade = classGrade(classInfo.name)
+  const grade = classGradeOf(classInfo)
   return grade === 'other' ? 'other' : `grade:${grade}`
 }
 
-function gradeLabel(value: GradeFilter, t: TFunction): string {
+function gradeLabel(value: GradeFilter, level: SchoolLevel | undefined, t: TFunction): string {
   if (value === 'all') return t('common.all')
   if (value === 'other') return t('common.other')
-  return t('teacher.gradeLabel', { grade: value.replace('grade:', '') })
+  return formatGrade(level, Number(value.replace('grade:', '')), t)
 }
 
 function routeView(searchParams: URLSearchParams): TeacherRouteView {
@@ -423,7 +433,7 @@ function Dashboard({
     const grades = new Set<number>()
     let hasOther = false
     activeSchool.classes.forEach((classInfo) => {
-      const grade = classGrade(classInfo.name)
+      const grade = classGradeOf(classInfo)
       if (grade === 'other') hasOther = true
       else grades.add(grade)
     })
@@ -474,10 +484,14 @@ function Dashboard({
 
       <div className="class-toolbar">
         <div>
-          <h2>{activeSchool.school.name}</h2>
+          <h2>
+            {activeSchool.school.name}{' '}
+            <span className="class-grade-chip">{levelLabel(activeSchool.school.level, t)}</span>
+          </h2>
           <p>
             {t('teacher.classesCount', { visible: filteredClasses.length, total: activeSchool.classes.length })}
           </p>
+          {!activeSchool.school.level ? <SchoolLevelSetter school={activeSchool.school} onChanged={onClassChanged} /> : null}
         </div>
         <div className="class-toolbar-actions">
           {gradeOptions.length > 1 ? (
@@ -485,7 +499,7 @@ function Dashboard({
               <div className="segmented compact-segmented grade-filter-tabs" role="group" aria-label={t('teacher.classGrade')}>
                 {gradeOptions.map((option) => (
                   <button key={option} type="button" className={gradeFilter === option ? 'active' : ''} onClick={() => changeGradeFilter(option)}>
-                    {gradeLabel(option, t)}
+                    {gradeLabel(option, activeSchool.school.level, t)}
                   </button>
                 ))}
               </div>
@@ -494,7 +508,7 @@ function Dashboard({
                 <select value={gradeFilter} onChange={(event) => changeGradeFilter(event.target.value as GradeFilter)}>
                   {gradeOptions.map((option) => (
                     <option key={option} value={option}>
-                      {gradeLabel(option, t)}
+                      {gradeLabel(option, activeSchool.school.level, t)}
                     </option>
                   ))}
                 </select>
@@ -522,6 +536,7 @@ function Dashboard({
               <ClassCard
                 key={classInfo.id}
                 schoolName={activeSchool.school.name}
+                schoolLevel={activeSchool.school.level}
                 classInfo={classInfo}
                 selected={classInfo.id === selectedClassId}
                 qrOpen={routeModal === 'qr' && routeClassId === classInfo.id}
@@ -538,6 +553,7 @@ function Dashboard({
         ) : (
           <ClassListView
             schoolName={activeSchool.school.name}
+            schoolLevel={activeSchool.school.level}
             classes={filteredClasses}
             selectedClassId={selectedClassId}
             routeModal={routeModal}
@@ -581,6 +597,7 @@ function Dashboard({
 
 function ClassListView({
   schoolName,
+  schoolLevel,
   classes,
   selectedClassId,
   routeModal,
@@ -592,6 +609,7 @@ function ClassListView({
   onClassChanged,
 }: {
   schoolName: string
+  schoolLevel?: SchoolLevel
   classes: ClassDoc[]
   selectedClassId: string
   routeModal: TeacherRouteModal | null
@@ -623,6 +641,7 @@ function ClassListView({
       </div>
       <ClassCard
         schoolName={schoolName}
+        schoolLevel={schoolLevel}
         classInfo={selectedClass}
         selected
         qrOpen={routeModal === 'qr' && routeClassId === selectedClass.id}
@@ -638,6 +657,39 @@ function ClassListView({
   )
 }
 
+function SchoolLevelSetter({ school, onChanged }: { school: SchoolDoc; onChanged: () => Promise<void> }) {
+  const toast = useToast()
+  const t = useT()
+  const [busy, setBusy] = useState(false)
+
+  const setLevel = async (level: SchoolLevel) => {
+    setBusy(true)
+    try {
+      await api.setSchoolLevel({ eventId: school.eventId, schoolId: school.id }, level)
+      toast(`${school.name} — ${levelLabel(level, t)}`, 'success')
+      await onChanged()
+    } catch (error) {
+      toast(errorText(error), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <label className="school-level-setter">
+      {t('common.schoolLevel')}
+      <select disabled={busy} value="" onChange={(event) => event.target.value && void setLevel(event.target.value as SchoolLevel)}>
+        <option value="">{t('common.selectLevel')}</option>
+        {SCHOOL_LEVELS.map((level) => (
+          <option key={level} value={level}>
+            {levelLabel(level, t)}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 function AddClassModal({
   school,
   onClose,
@@ -650,7 +702,12 @@ function AddClassModal({
   const toast = useToast()
   const t = useT()
   const [name, setName] = useState('')
+  const [level, setLevel] = useState<SchoolLevel | ''>(school.school.level ?? '')
+  const [grade, setGrade] = useState('')
   const [busy, setBusy] = useState(false)
+  const knownLevel = school.school.level
+  const effectiveLevel = knownLevel ?? (level || undefined)
+  const gradeOptions = effectiveLevel ? GRADES_BY_LEVEL[effectiveLevel] : []
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -668,7 +725,10 @@ function AddClassModal({
     }
     setBusy(true)
     try {
-      const classInfo = await api.addClass({ eventId: school.school.eventId, schoolId: school.school.id }, trimmed)
+      const path = { eventId: school.school.eventId, schoolId: school.school.id }
+      if (!knownLevel && level) await api.setSchoolLevel(path, level)
+      const gradeNumber = grade ? Number(grade) : undefined
+      const classInfo = await api.addClass(path, trimmed, gradeNumber)
       toast(t('teacher.classAdded', { className: classInfo.name }), 'success')
       await onCreated(classInfo)
     } catch (error) {
@@ -694,6 +754,36 @@ function AddClassModal({
           {t('common.className')}
           <input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder={t('teacher.exampleClass')} />
         </label>
+        {!knownLevel ? (
+          <label>
+            {t('common.schoolLevel')}
+            <select
+              value={level}
+              onChange={(event) => {
+                setLevel(event.target.value as SchoolLevel | '')
+                setGrade('')
+              }}
+            >
+              <option value="">{t('common.selectLevel')}</option>
+              {SCHOOL_LEVELS.map((option) => (
+                <option key={option} value={option}>
+                  {levelLabel(option, t)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <label>
+          {t('common.grade')}
+          <select value={grade} onChange={(event) => setGrade(event.target.value)} disabled={!effectiveLevel}>
+            <option value="">{effectiveLevel ? t('common.noGrade') : t('teacher.setLevelFirst')}</option>
+            {gradeOptions.map((option) => (
+              <option key={option} value={option}>
+                {formatGrade(effectiveLevel, option, t)}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="row-actions">
           <button className="ghost" type="button" onClick={onClose} disabled={busy}>
             {t('common.cancel')}
@@ -709,6 +799,7 @@ function AddClassModal({
 
 function ClassCard({
   schoolName,
+  schoolLevel,
   classInfo,
   selected,
   qrOpen,
@@ -721,6 +812,7 @@ function ClassCard({
   onClassChanged,
 }: {
   schoolName: string
+  schoolLevel?: SchoolLevel
   classInfo: ClassDoc
   selected: boolean
   qrOpen: boolean
@@ -736,8 +828,8 @@ function ClassCard({
   const t = useT()
   const [busyAction, setBusyAction] = useState<'reset' | 'toggle' | ''>('')
   const url = joinUrl(classInfo.joinCode)
-  const grade = classGrade(classInfo.name)
-  const gradeText = grade === 'other' ? null : t('teacher.gradeLabel', { grade })
+  const grade = classGradeOf(classInfo)
+  const gradeText = grade === 'other' ? null : formatGrade(schoolLevel, grade, t)
 
   const resetCode = async () => {
     setBusyAction('reset')
@@ -1528,6 +1620,20 @@ select {
   line-height: 1;
   padding: 5px 7px;
   text-transform: uppercase;
+}
+.school-level-setter {
+  align-items: center;
+  color: #667085;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  gap: 8px;
+  margin-top: 6px;
+}
+.school-level-setter select {
+  border: 1px solid #c9d8ff;
+  border-radius: 8px;
+  padding: 4px 8px;
 }
 .class-card-select strong,
 .print-code {

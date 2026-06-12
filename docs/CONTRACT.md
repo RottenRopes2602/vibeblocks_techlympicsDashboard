@@ -1,4 +1,11 @@
-# vb-116 공유 계약 (CONTRACT) — v4 (2026-06-12 2차 개정)
+# vb-116 공유 계약 (CONTRACT) — v6 (2026-06-12 3차 개정)
+
+> **v6 변경 (학교 등급·학년 — vib-318):**
+> A. **SchoolLevel 도입** (말레이시아 체계): `primary`=Sekolah Rendah(Standard/Tahun 1-6) / `secondary`=Sekolah Menengah(Form/Tingkatan 1-5). `SchoolDoc.level?` — 신규 생성(단건 추가·벌크 import)은 입력, legacy 학교는 콘솔 후설정(teacher: 학교 헤더 / admin: Schools 표 Level 셀).
+> B. **ClassDoc.grade?** — 학급 학년(숫자). 생성 시 school.level 기준 선택지(Standard 1-6 / Form 1-5). 표시 라벨은 level 기반(`lib/grade.ts` formatGrade). 학년 필터는 grade 필드 우선, 없으면 학급명 앞자리 파싱(legacy).
+> C. api: `addClass(s, name, grade?)` / `setSchoolLevel(s, level)`(admin/master + 바인딩 teacher). `ImportRow.level?` — import 셀 자유표기(primary/rendah·secondary/menengah) 파싱.
+> D. rules: school keys에 `level`(enum 검증) — 바인딩 teacher는 level 키 단독 update만 허용. class keys에 `grade`(int 1-6).
+> E. v4-E("grade 입력 폐지")는 **앱 참가자 grade** 한정 — 학급 grade는 본 개정으로 정식 모델.
 
 > **v4 변경:**
 > A. **랭킹 정렬 v4** (`scoring.ts`): 완료 종목 수 내림차순 → 완료분 평균 오름차순 → 갱신시각. **미시도 포함 전원 표시** (완료 0 = rank '-', 최하단). LeaderboardRow에 `completedCount` 추가. 무순위제(3개 미완) 폐지.
