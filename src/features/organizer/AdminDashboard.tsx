@@ -2,7 +2,18 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { api } from '../../api'
 import { formatSec } from '../../api/scoring'
-import type { ChallengeDef, ChallengeSlot, EventDoc, EventStats, ImportResult, ImportRow, LeaderboardRow } from '../../api/types'
+import type {
+  ChallengeDef,
+  ChallengeSlot,
+  ClassStats,
+  EventDoc,
+  EventStats,
+  ImportResult,
+  ImportRow,
+  LeaderboardRow,
+  ParticipantDoc,
+  TeacherBinding,
+} from '../../api/types'
 import { useToast } from '../../lib/toast'
 import { sampleImportRows } from './fixtures/sampleImportRows'
 import './admin.css'
@@ -78,6 +89,13 @@ function normalizedCell(value: unknown) {
 
 function normalizedSearch(value: string | undefined) {
   return (value ?? '').trim().toLowerCase()
+}
+
+function formatDateTime(value: string | undefined) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
 }
 
 function pickInitialMapping(headers: string[]): Record<ImportField, string> {
@@ -173,10 +191,6 @@ function eventToForm(event: EventDoc): EventForm {
 
 function totalAttempts(row: LeaderboardRow) {
   return row.attemptsUsed.c1 + row.attemptsUsed.c2 + row.attemptsUsed.c3
-}
-
-function completedChallenges(row: LeaderboardRow, challenges: ChallengeDef[]) {
-  return challenges.filter((challenge) => row.bests[challenge.slot] !== undefined).length
 }
 
 function statusLabel(status: LeaderboardRow['status']) {
@@ -305,6 +319,7 @@ export default function AdminDashboard() {
           {tab === 'import' && selectedEvent && (
             <ImportPanel
               event={selectedEvent}
+              schools={schools}
               onImported={async (message) => {
                 toast(message, 'success')
                 await refresh(selectedEvent.id)
@@ -508,22 +523,37 @@ function EventCreateModal({ onClose, onCreated }: { onClose: () => void; onCreat
   )
 }
 
-function ImportPanel({ event, onImported }: { event: EventDoc; onImported: (message: string) => Promise<void> }) {
+function ImportPanel({
+  event,
+  schools,
+  onImported,
+}: {
+  event: EventDoc
+  schools: AdminSchoolView[]
+  onImported: (message: string) => Promise<void>
+}) {
   const toast = useToast()
-  const [single, setSingle] = useState<ImportRow>({ schoolName: '', state: '', className: '' })
+  const [schoolForm, setSchoolForm] = useState({ schoolName: '', state: '', firstClassName: '' })
+  const [classForm, setClassForm] = useState({ schoolId: '', className: '' })
   const [workbook, setWorkbook] = useState<ParsedWorkbook | null>(null)
   const [mapping, setMapping] = useState<Record<ImportField, string>>({ schoolName: '', className: '', state: '', zone: '' })
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [result, setResult] = useState<ImportResult | null>(null)
   const [resultRows, setResultRows] = useState<PreviewRow[]>([])
   const [error, setError] = useState('')
-  const [singleBusy, setSingleBusy] = useState(false)
+  const [schoolBusy, setSchoolBusy] = useState(false)
+  const [classBusy, setClassBusy] = useState(false)
   const [workbookBusy, setWorkbookBusy] = useState(false)
 
   const rows = workbook ? workbook.sheets[workbook.sheetName] ?? [] : []
   const headers = rows[0] ?? []
   const preview = useMemo(() => buildPreview(rows, mapping, selected), [rows, mapping, selected])
   const importable = preview.filter((row) => row.selected)
+
+  useEffect(() => {
+    if (classForm.schoolId && schools.some((school) => school.school.id === classForm.schoolId)) return
+    setClassForm((current) => ({ ...current, schoolId: schools[0]?.school.id ?? '' }))
+  }, [classForm.schoolId, schools])
 
   const loadFile = async (file: File | undefined) => {
     if (!file) return
@@ -543,23 +573,39 @@ function ImportPanel({ event, onImported }: { event: EventDoc; onImported: (mess
     }
   }
 
-  const importSingle = async () => {
-    setSingleBusy(true)
+  const addSchool = async () => {
+    setSchoolBusy(true)
     setError('')
     try {
       const response = await api.importSchools(event.id, [{
-        schoolName: single.schoolName.trim(),
-        className: single.className.trim(),
-        state: single.state?.trim() || undefined,
+        schoolName: schoolForm.schoolName.trim(),
+        className: schoolForm.firstClassName.trim(),
+        state: schoolForm.state.trim() || undefined,
       }])
-      setSingle({ schoolName: '', state: '', className: '' })
-      await onImported(`Import finished: ${response.classes.length} class created, ${response.skipped.length} skipped.`)
+      setSchoolForm({ schoolName: '', state: '', firstClassName: '' })
+      await onImported(`School import finished: ${response.schools.length} school, ${response.classes.length} class, ${response.skipped.length} skipped.`)
     } catch (err) {
       const message = getErrorMessage(err)
       setError(message)
       toast(message, 'error')
     } finally {
-      setSingleBusy(false)
+      setSchoolBusy(false)
+    }
+  }
+
+  const addClass = async () => {
+    setClassBusy(true)
+    setError('')
+    try {
+      const created = await api.addClass({ eventId: event.id, schoolId: classForm.schoolId }, classForm.className.trim())
+      setClassForm((current) => ({ ...current, className: '' }))
+      await onImported(`Class added: ${created.name}.`)
+    } catch (err) {
+      const message = getErrorMessage(err)
+      setError(message)
+      toast(message, 'error')
+    } finally {
+      setClassBusy(false)
     }
   }
 
@@ -590,22 +636,43 @@ function ImportPanel({ event, onImported }: { event: EventDoc; onImported: (mess
       <div className="ops-topbar">
         <div>
           <h2>Import</h2>
-          <p className="ops-subtle">Add one class or upload a workbook. Result exports include teacher codes only.</p>
+          <p className="ops-subtle">Add schools, add classes to existing schools, or upload a workbook. Result exports include teacher codes only.</p>
         </div>
         <button className="ops-button" onClick={downloadSampleWorkbook}>Download sample xlsx</button>
       </div>
       {error && <div className="ops-alert">{error}</div>}
 
       <section className="ops-subsection">
-        <h3>Add one class</h3>
+        <h3>Add school</h3>
         <div className="ops-form three">
-          <label className="ops-label">School name<input className="ops-input" value={single.schoolName} onChange={(e) => setSingle({ ...single, schoolName: e.target.value })} /></label>
-          <label className="ops-label">State<input className="ops-input" value={single.state ?? ''} onChange={(e) => setSingle({ ...single, state: e.target.value })} /></label>
-          <label className="ops-label">Class name<input className="ops-input" value={single.className} onChange={(e) => setSingle({ ...single, className: e.target.value })} /></label>
+          <label className="ops-label">School name<input className="ops-input" value={schoolForm.schoolName} onChange={(e) => setSchoolForm({ ...schoolForm, schoolName: e.target.value })} /></label>
+          <label className="ops-label">State<input className="ops-input" value={schoolForm.state} onChange={(e) => setSchoolForm({ ...schoolForm, state: e.target.value })} /></label>
+          <label className="ops-label">First class<input className="ops-input" value={schoolForm.firstClassName} onChange={(e) => setSchoolForm({ ...schoolForm, firstClassName: e.target.value })} /></label>
         </div>
         <div className="ops-row-actions" style={{ marginTop: 12 }}>
-          <button className="ops-button primary" disabled={singleBusy || !single.schoolName.trim() || !single.className.trim()} onClick={() => void importSingle()}>
-            {singleBusy ? 'Importing...' : 'Import class'}
+          <button
+            className="ops-button primary"
+            disabled={schoolBusy || !schoolForm.schoolName.trim() || !schoolForm.firstClassName.trim()}
+            onClick={() => void addSchool()}
+          >
+            {schoolBusy ? 'Adding...' : 'Add school'}
+          </button>
+        </div>
+      </section>
+
+      <section className="ops-subsection">
+        <h3>Add class</h3>
+        <div className="ops-form two">
+          <label className="ops-label">School
+            <select className="ops-select" value={classForm.schoolId} onChange={(e) => setClassForm({ ...classForm, schoolId: e.target.value })}>
+              {schools.map((school) => <option key={school.school.id} value={school.school.id}>{school.school.name}</option>)}
+            </select>
+          </label>
+          <label className="ops-label">Class name<input className="ops-input" value={classForm.className} onChange={(e) => setClassForm({ ...classForm, className: e.target.value })} /></label>
+        </div>
+        <div className="ops-row-actions" style={{ marginTop: 12 }}>
+          <button className="ops-button primary" disabled={classBusy || !classForm.schoolId || !classForm.className.trim()} onClick={() => void addClass()}>
+            {classBusy ? 'Adding...' : 'Add class'}
           </button>
         </div>
       </section>
@@ -705,9 +772,15 @@ function SchoolsPanel({
   const toast = useToast()
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [expandedClasses, setExpandedClasses] = useState<Set<string>>(new Set())
+  const [teachersBySchool, setTeachersBySchool] = useState<Record<string, TeacherBinding[]>>({})
+  const [participantsByClass, setParticipantsByClass] = useState<Record<string, ParticipantDoc[]>>({})
   const [rankingKey, setRankingKey] = useState('')
   const [rankingRows, setRankingRows] = useState<LeaderboardRow[]>([])
   const [busySchoolId, setBusySchoolId] = useState('')
+  const [loadingTeachersSchoolId, setLoadingTeachersSchoolId] = useState('')
+  const [revokingTeacherKey, setRevokingTeacherKey] = useState('')
+  const [loadingParticipantsKey, setLoadingParticipantsKey] = useState('')
   const [busyRankingKey, setBusyRankingKey] = useState('')
   const [error, setError] = useState('')
 
@@ -721,11 +794,28 @@ function SchoolsPanel({
     })
   }, [query, schools])
 
-  const toggleExpanded = (schoolId: string) => {
+  const loadTeachers = async (schoolId: string) => {
+    setLoadingTeachersSchoolId(schoolId)
+    setError('')
+    try {
+      const teachers = await api.listSchoolTeachers({ eventId: event.id, schoolId })
+      setTeachersBySchool((current) => ({ ...current, [schoolId]: teachers }))
+    } catch (err) {
+      const message = getErrorMessage(err)
+      setError(message)
+      toast(message, 'error')
+    } finally {
+      setLoadingTeachersSchoolId('')
+    }
+  }
+
+  const toggleExpanded = async (schoolId: string) => {
     const next = new Set(expanded)
-    if (next.has(schoolId)) next.delete(schoolId)
-    else next.add(schoolId)
+    const opening = !next.has(schoolId)
+    if (opening) next.add(schoolId)
+    else next.delete(schoolId)
     setExpanded(next)
+    if (opening && teachersBySchool[schoolId] === undefined) await loadTeachers(schoolId)
   }
 
   const copyTeacherCode = async (code: string) => {
@@ -748,6 +838,52 @@ function SchoolsPanel({
     } finally {
       setBusySchoolId('')
     }
+  }
+
+  const revokeTeacher = async (schoolId: string, teacher: TeacherBinding) => {
+    const label = teacher.email || teacher.uid
+    const ok = window.confirm(`Revoke teacher binding for ${label}?`)
+    if (!ok) return
+    const key = `${schoolId}:${teacher.uid}`
+    setRevokingTeacherKey(key)
+    setError('')
+    try {
+      await api.revokeTeacherBinding({ eventId: event.id, schoolId }, teacher.uid)
+      toast('Teacher binding revoked.', 'success')
+      await loadTeachers(schoolId)
+    } catch (err) {
+      const message = getErrorMessage(err)
+      setError(message)
+      toast(message, 'error')
+    } finally {
+      setRevokingTeacherKey('')
+    }
+  }
+
+  const loadParticipants = async (schoolId: string, classId: string) => {
+    const key = `${schoolId}:${classId}`
+    setLoadingParticipantsKey(key)
+    setError('')
+    try {
+      const participants = await api.listParticipants({ eventId: event.id, schoolId, classId })
+      setParticipantsByClass((current) => ({ ...current, [key]: participants }))
+    } catch (err) {
+      const message = getErrorMessage(err)
+      setError(message)
+      toast(message, 'error')
+    } finally {
+      setLoadingParticipantsKey('')
+    }
+  }
+
+  const toggleClass = async (schoolId: string, classId: string) => {
+    const key = `${schoolId}:${classId}`
+    const next = new Set(expandedClasses)
+    const opening = !next.has(key)
+    if (opening) next.add(key)
+    else next.delete(key)
+    setExpandedClasses(next)
+    if (opening && participantsByClass[key] === undefined) await loadParticipants(schoolId, classId)
   }
 
   const viewRanking = async (schoolId: string, classId: string) => {
@@ -786,6 +922,7 @@ function SchoolsPanel({
         <table className="ops-table">
           <thead>
             <tr>
+              <th aria-label="Expand"></th>
               <th>School</th>
               <th>State</th>
               <th>Teacher code</th>
@@ -803,13 +940,21 @@ function SchoolsPanel({
                 <Fragment key={schoolId}>
                   <tr>
                     <td>
-                      <button className="ops-link-button" onClick={() => toggleExpanded(schoolId)}>
-                        {isExpanded ? 'Hide' : 'Show'}
+                      <button
+                        aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${school.school.name}`}
+                        className="ops-icon-button"
+                        onClick={() => void toggleExpanded(schoolId)}
+                      >
+                        {isExpanded ? '▾' : '▸'}
                       </button>
+                    </td>
+                    <td>
                       <strong>{school.school.name}</strong>
                     </td>
                     <td>{school.school.state ?? ''}</td>
-                    <td><code>{school.school.teacherCode}</code></td>
+                    <td>
+                      {busySchoolId === schoolId ? <span className="ops-skeleton code" aria-label="Updating teacher code" /> : <code>{school.school.teacherCode}</code>}
+                    </td>
                     <td>{school.classes.length}</td>
                     <td>{participantCount}</td>
                     <td>
@@ -823,13 +968,24 @@ function SchoolsPanel({
                   </tr>
                   {isExpanded && (
                     <tr>
-                      <td colSpan={6}>
+                      <td colSpan={7}>
+                        <TeacherBindingsPanel
+                          teachers={teachersBySchool[schoolId] ?? []}
+                          loading={loadingTeachersSchoolId === schoolId}
+                          revokingKey={revokingTeacherKey}
+                          schoolId={schoolId}
+                          onRevoke={(teacher) => revokeTeacher(schoolId, teacher)}
+                        />
                         <ClassList
                           event={event}
+                          expandedClasses={expandedClasses}
+                          loadingParticipantsKey={loadingParticipantsKey}
+                          participantsByClass={participantsByClass}
                           rankingKey={rankingKey}
                           rankingRows={rankingRows}
                           school={school}
                           busyRankingKey={busyRankingKey}
+                          onToggleClass={toggleClass}
                           onViewRanking={viewRanking}
                         />
                       </td>
@@ -846,19 +1002,83 @@ function SchoolsPanel({
   )
 }
 
+function TeacherBindingsPanel({
+  teachers,
+  loading,
+  revokingKey,
+  schoolId,
+  onRevoke,
+}: {
+  teachers: TeacherBinding[]
+  loading: boolean
+  revokingKey: string
+  schoolId: string
+  onRevoke: (teacher: TeacherBinding) => void
+}) {
+  return (
+    <section className="ops-nested-section">
+      <div className="ops-topbar compact">
+        <h3>Teachers</h3>
+        {loading && <span className="ops-skeleton text" aria-label="Loading teachers" />}
+      </div>
+      {!loading && teachers.length === 0 ? (
+        <p className="ops-subtle">No teachers bound to this school.</p>
+      ) : (
+        <div className="ops-table-wrap">
+          <table className="ops-table compact">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>UID</th>
+                <th>Bound at</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {teachers.map((teacher) => {
+                const key = `${schoolId}:${teacher.uid}`
+                return (
+                  <tr key={teacher.uid}>
+                    <td>{teacher.email ?? '-'}</td>
+                    <td><code>{teacher.uid}</code></td>
+                    <td>{formatDateTime(teacher.boundAt)}</td>
+                    <td>
+                      <button className="ops-button danger" disabled={revokingKey === key} onClick={() => onRevoke(teacher)}>
+                        {revokingKey === key ? 'Revoking...' : 'Revoke'}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  )
+}
+
 function ClassList({
   event,
   school,
+  expandedClasses,
+  participantsByClass,
+  loadingParticipantsKey,
   rankingKey,
   rankingRows,
   busyRankingKey,
+  onToggleClass,
   onViewRanking,
 }: {
   event: EventDoc
   school: AdminSchoolView
+  expandedClasses: Set<string>
+  participantsByClass: Record<string, ParticipantDoc[]>
+  loadingParticipantsKey: string
   rankingKey: string
   rankingRows: LeaderboardRow[]
   busyRankingKey: string
+  onToggleClass: (schoolId: string, classId: string) => Promise<void>
   onViewRanking: (schoolId: string, classId: string) => Promise<void>
 }) {
   return (
@@ -866,6 +1086,7 @@ function ClassList({
       <table className="ops-table compact">
         <thead>
           <tr>
+            <th aria-label="Expand class"></th>
             <th>Class</th>
             <th>Participants</th>
             <th>Approved</th>
@@ -876,9 +1097,19 @@ function ClassList({
         <tbody>
           {school.classes.map((classStats) => {
             const key = `${school.school.id}:${classStats.classInfo.id}`
+            const classExpanded = expandedClasses.has(key)
             return (
               <Fragment key={classStats.classInfo.id}>
                 <tr>
+                  <td>
+                    <button
+                      aria-label={`${classExpanded ? 'Collapse' : 'Expand'} ${classStats.classInfo.name}`}
+                      className="ops-icon-button"
+                      onClick={() => void onToggleClass(school.school.id, classStats.classInfo.id)}
+                    >
+                      {classExpanded ? '▾' : '▸'}
+                    </button>
+                  </td>
                   <td>{classStats.classInfo.name}</td>
                   <td>{classStats.participantCount}</td>
                   <td>{classStats.approvedCount}</td>
@@ -889,9 +1120,20 @@ function ClassList({
                     </button>
                   </td>
                 </tr>
+                {classExpanded && (
+                  <tr>
+                    <td colSpan={6}>
+                      <ParticipantTable
+                        classStats={classStats}
+                        loading={loadingParticipantsKey === key}
+                        participants={participantsByClass[key] ?? []}
+                      />
+                    </td>
+                  </tr>
+                )}
                 {rankingKey === key && (
                   <tr>
-                    <td colSpan={5}>
+                    <td colSpan={6}>
                       <LeaderboardTable event={event} rows={rankingRows} />
                     </td>
                   </tr>
@@ -905,12 +1147,56 @@ function ClassList({
   )
 }
 
+function ParticipantTable({
+  classStats,
+  participants,
+  loading,
+}: {
+  classStats: ClassStats
+  participants: ParticipantDoc[]
+  loading: boolean
+}) {
+  return (
+    <section className="ops-nested-section">
+      <div className="ops-topbar compact">
+        <h3>Participants · {classStats.classInfo.name}</h3>
+        {loading && <span className="ops-skeleton text" aria-label="Loading participants" />}
+      </div>
+      {!loading && participants.length === 0 ? (
+        <p className="ops-subtle">No participants registered yet.</p>
+      ) : (
+        <div className="ops-table-wrap">
+          <table className="ops-table compact">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Public ID</th>
+                <th>Status</th>
+                <th>Registered</th>
+              </tr>
+            </thead>
+            <tbody>
+              {participants.map((participant) => (
+                <tr key={participant.id}>
+                  <td>{participant.name}</td>
+                  <td><code>{participant.publicId}</code></td>
+                  <td><span className={`ops-pill ${participant.status === 'approved' ? 'ok' : participant.status === 'pending' ? '' : 'warn'}`}>{statusLabel(participant.status)}</span></td>
+                  <td>{formatDateTime(participant.registeredAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  )
+}
+
 function LeaderboardTable({ event, rows }: { event: EventDoc; rows: LeaderboardRow[] }) {
   const challenges = event.challenges.length ? event.challenges : fallbackChallenges
-  const visibleRows = rows.filter((row) => row.rank !== null || totalAttempts(row) > 0)
   const maxAttempts = event.attemptsPerChallenge === null ? null : event.attemptsPerChallenge * challenges.length
 
-  if (visibleRows.length === 0) return <p className="ops-subtle">No ranking records yet.</p>
+  if (rows.length === 0) return <p className="ops-subtle">No ranking records yet.</p>
 
   return (
     <div className="ops-table-wrap">
@@ -920,16 +1206,17 @@ function LeaderboardTable({ event, rows }: { event: EventDoc; rows: LeaderboardR
             <th>Rank</th>
             <th>Name</th>
             {challenges.map((challenge) => <th key={challenge.slot}>{challenge.name}</th>)}
+            <th>Completed</th>
             <th>Average</th>
             <th>Attempts</th>
           </tr>
         </thead>
         <tbody>
-          {visibleRows.map((row, index) => (
+          {rows.map((row, index) => (
             <Fragment key={row.publicId}>
-              {row.rank === null && visibleRows[index - 1]?.rank !== null && (
+              {row.completedCount === 0 && rows[index - 1]?.completedCount !== 0 && (
                 <tr className="ops-group-row">
-                  <td colSpan={challenges.length + 4}>Unranked - complete all 3 challenges to enter the ranking</td>
+                  <td colSpan={challenges.length + 5}>No completed challenge yet</td>
                 </tr>
               )}
               <tr>
@@ -938,11 +1225,12 @@ function LeaderboardTable({ event, rows }: { event: EventDoc; rows: LeaderboardR
                   <strong>{row.name}</strong>
                   <br />
                   <span className="ops-subtle">{row.publicId} - {statusLabel(row.status)}</span>
-                  {row.rank === null && <span className="ops-pill warn">Challenge {completedChallenges(row, challenges)}/{challenges.length}</span>}
+                  {row.completedCount === 0 && <span className="ops-pill warn">No record</span>}
                 </td>
                 {challenges.map((challenge) => (
                   <td key={challenge.slot}>{formatSec(row.bests[challenge.slot])}</td>
                 ))}
+                <td>{row.completedCount}/{challenges.length}</td>
                 <td>{formatSec(row.averageSec)}</td>
                 <td>
                   {maxAttempts === null ? `${totalAttempts(row)} / unlimited` : `${totalAttempts(row)} / ${maxAttempts}`}

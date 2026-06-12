@@ -256,6 +256,71 @@
   padding: 0;
 }
 
+.ops-icon-button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #c8d2df;
+  border-radius: 6px;
+  color: #172033;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 16px;
+  font-weight: 800;
+  height: 30px;
+  justify-content: center;
+  line-height: 1;
+  width: 30px;
+}
+
+.ops-icon-button:hover {
+  border-color: #526b91;
+}
+
+.ops-filter-bar {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(150px, 180px) minmax(220px, 1fr);
+  min-width: min(420px, 100%);
+}
+
+.ops-nested-section {
+  background: #ffffff;
+  border: 1px solid #e3e8ef;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  padding: 10px;
+}
+
+.ops-skeleton {
+  animation: ops-shimmer 1.15s linear infinite;
+  background: linear-gradient(90deg, #e7edf4 0%, #f6f8fb 45%, #dfe7f0 70%, #e7edf4 100%);
+  background-size: 220% 100%;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+.ops-skeleton.code {
+  height: 18px;
+  min-width: 112px;
+  vertical-align: middle;
+}
+
+.ops-skeleton.text {
+  height: 18px;
+  min-width: 160px;
+}
+
+@keyframes ops-shimmer {
+  from {
+    background-position: 220% 0;
+  }
+
+  to {
+    background-position: -220% 0;
+  }
+}
+
 .ops-subsection {
   border-top: 1px solid #e3e8ef;
   margin-top: 16px;
@@ -341,6 +406,7 @@
   .ops-grid,
   .ops-form.two,
   .ops-form.three,
+  .ops-filter-bar,
   .ops-stat-grid {
     grid-template-columns: 1fr;
   }
