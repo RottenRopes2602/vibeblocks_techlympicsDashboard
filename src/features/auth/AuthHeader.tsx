@@ -7,6 +7,7 @@ import type { RoleDoc } from '../../api/types'
 import { auth } from '../../lib/firebase'
 import { LanguageToggle, useT } from '../../lib/i18n'
 import { useToast } from '../../lib/toast'
+import ChangePasswordModal from './ChangePasswordModal'
 import { userLabel } from './session'
 
 function accountDeleteErrorText(error: unknown, t: ReturnType<typeof useT>): string {
@@ -33,6 +34,8 @@ export default function AuthHeader({
   const t = useT()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false)
+  const hasPasswordProvider = Boolean(user?.providerData.some((info) => info.providerId === 'password'))
 
   const logout = async () => {
     setBusy(true)
@@ -80,6 +83,11 @@ export default function AuthHeader({
               {t('common.refresh')}
             </button>
           ) : null}
+          {hasPasswordProvider ? (
+            <button className="auth-button" type="button" onClick={() => setChangePasswordOpen(true)} disabled={busy}>
+              {t('auth.changePassword')}
+            </button>
+          ) : null}
           <button className="auth-button danger" type="button" onClick={() => void deleteAccount()} disabled={busy}>
             {busy ? t('common.working') : t('auth.deleteAccount')}
           </button>
@@ -89,6 +97,9 @@ export default function AuthHeader({
         </div>
       </header>
       {error ? <div className="auth-alert">{error}</div> : null}
+      {changePasswordOpen && user ? (
+        <ChangePasswordModal user={user} onClose={() => setChangePasswordOpen(false)} />
+      ) : null}
     </>
   )
 }
