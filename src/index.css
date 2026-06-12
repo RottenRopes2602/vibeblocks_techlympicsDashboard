@@ -12,6 +12,7 @@ body {
 }
 
 /* vb-responsive-baseline (v5) — 모바일 가로 오버플로 = "확대된 느낌"의 근원 차단 */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; } /* iOS 자동 텍스트 확대 방지 */
 html, body { overflow-x: hidden; }
 main { max-width: 1200px; margin-inline: auto; width: 100%; }
 table { width: 100%; }
