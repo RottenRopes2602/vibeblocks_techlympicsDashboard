@@ -10,8 +10,9 @@
 ### 1. 처음 시작하기 — 계정과 권한
 
 1. 운영 총괄(master)에게 **운영자 초대코드**(`V-`로 시작, 10자)를 받습니다.
-2. https://vibeblocks.co/techlympics 에 접속해 **로그인**합니다 (Google 계정 또는 이메일/비밀번호).
-3. 아직 역할이 없는 계정이라면 로그인 후 안내 화면이 나옵니다. **초대코드 입력**란에 받은 `V-` 코드를 넣으면 운영자 권한이 부여되고, 이후부터는 로그인하면 바로 **운영자 콘솔(`/admin`)**로 이동합니다.
+2. https://vibeblocks.co/techlympics 첫 화면의 **코드 입력칸**(교사코드와 같은 칸)에 받은 `V-` 코드를 입력합니다.
+3. 코드가 확인되면 그 자리에서 **계정을 만들거나**(이메일/비밀번호 또는 Google), 이미 로그인한 상태라면 **즉시 운영자 권한이 부여**됩니다. 이후부터는 로그인하면 바로 **운영자 콘솔(`/admin`)**로 이동합니다.
+- 운영자 진입 동선은 화면에 따로 표시되지 않습니다(일반인 비노출) — 초대코드를 가진 사람만 같은 입력칸으로 들어옵니다.
 - 화면 오른쪽 위에서 **언어(English / Bahasa Melayu)** 를 전환할 수 있습니다.
 
 ### 2. 운영자 콘솔 한눈에 보기 — 탭 4개
@@ -72,8 +73,9 @@
 ### 1. Getting started — account & access
 
 1. Get an **admin invite code** (starts with `V-`, 10 characters) from the platform master.
-2. Go to https://vibeblocks.co/techlympics and **sign in** (Google account or email/password).
-3. If your account has no role yet, a landing screen appears after sign-in. Enter your `V-` code in the **invite code** field — your account becomes an admin, and from then on signing in takes you straight to the **Admin Console (`/admin`)**.
+2. On the front page of https://vibeblocks.co/techlympics, enter your `V-` code in the **code field** (the same field teachers use).
+3. Once the code is verified, **create an account** right there (email/password or Google) — or, if you are already signed in, the admin role is **granted immediately**. From then on, signing in takes you straight to the **Admin Console (`/admin`)**.
+- There is no visible "admin" entry on the page (intentionally unadvertised) — only people holding an invite code come in through the same field.
 - You can switch the language (**English / Bahasa Melayu**) at the top right.
 
 ### 2. Admin Console at a glance — four tabs
