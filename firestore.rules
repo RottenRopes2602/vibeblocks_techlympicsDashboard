@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // ============================================================
-// vb-116 Firestore rules v3 — CONTRACT.md v3 §4 invariants.
+// vb-116 Firestore rules v4 — CONTRACT.md v4 §4 invariants.
 // 기본 = deny. capability code 문서는 get만 공개, 본체 쓰기는 역할/소유권으로 제한.
 // ============================================================
 service cloud.firestore {
@@ -124,8 +124,9 @@ service cloud.firestore {
     function validAdminRoleFromInvite(uid) {
       return authed()
         && uid == request.auth.uid
-        && request.resource.data.keys().hasOnly(['role', 'inviteCode', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['role', 'email', 'inviteCode', 'createdAt'])
         && request.resource.data.role == 'admin'
+        && (!('email' in request.resource.data) || request.resource.data.email is string)
         && timestampField('createdAt')
         && getAfter(/databases/$(database)/documents/adminInvites/$(request.resource.data.inviteCode)).data.usedBy == request.auth.uid;
     }
@@ -133,7 +134,8 @@ service cloud.firestore {
       return authed()
         && uid == request.auth.uid
         && request.resource.data.role == 'teacher'
-        && request.resource.data.keys().hasOnly(['role', 'createdAt', 'code', 'eventId', 'schoolId', 'schoolPaths'])
+        && request.resource.data.keys().hasOnly(['role', 'email', 'createdAt', 'code', 'eventId', 'schoolId', 'schoolPaths'])
+        && (!('email' in request.resource.data) || request.resource.data.email is string)
         && timestampField('createdAt')
         && request.resource.data.schoolPaths is list
         && getAfter(/databases/$(database)/documents/events/$(request.resource.data.eventId)/schools/$(request.resource.data.schoolId)/teachers/$(request.auth.uid)).data.code
@@ -144,11 +146,25 @@ service cloud.firestore {
         && uid == request.auth.uid
         && resource.data.role == 'teacher'
         && request.resource.data.role == 'teacher'
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'schoolPaths']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'email', 'schoolPaths'])
+        && (!('email' in request.resource.data) || request.resource.data.email is string);
+    }
+    function validTeacherRoleAdminUpdate(uid) {
+      return isAdmin()
+        && resource.data.role == 'teacher'
+        && request.resource.data.role == 'teacher'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['schoolPaths']);
+    }
+    function validOwnRoleEmailUpdate(uid) {
+      return authed()
+        && uid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['email'])
+        && request.resource.data.email is string;
     }
     function validMasterRoleCreate() {
       return request.resource.data.keys().hasOnly(['role', 'email', 'inviteCode', 'createdAt'])
         && request.resource.data.role in ['teacher', 'admin']
+        && (!('email' in request.resource.data) || request.resource.data.email is string)
         && timestampField('createdAt');
     }
 
@@ -165,8 +181,10 @@ service cloud.firestore {
       allow create: if validAdminRoleFromInvite(uid)
         || validTeacherRoleCreate(uid)
         || (isMaster() && validMasterRoleCreate());
-      allow update: if validTeacherRoleUpdate(uid);
-      allow delete: if isMaster();
+      allow update: if validTeacherRoleUpdate(uid)
+        || validTeacherRoleAdminUpdate(uid)
+        || validOwnRoleEmailUpdate(uid);
+      allow delete: if isMaster() || (authed() && uid == request.auth.uid);
     }
 
     // ---------- document validators ----------
@@ -367,18 +385,19 @@ service cloud.firestore {
           allow get: if authed() && (uid == request.auth.uid || isAdmin());
           allow list: if isAdmin();
           allow create: if authed() && uid == request.auth.uid
-            && request.resource.data.keys().hasOnly(['code', 'boundAt'])
+            && request.resource.data.keys().hasOnly(['code', 'email', 'boundAt'])
+            && (!('email' in request.resource.data) || request.resource.data.email is string)
             && request.resource.data.code
                == get(/databases/$(database)/documents/events/$(eventId)/schools/$(schoolId)).data.teacherCode
             && timestampField('boundAt');
           allow update: if false;
-          allow delete: if isAdmin();
+          allow delete: if isAdmin() || (authed() && uid == request.auth.uid);
         }
 
         match /classes/{classId} {
           allow get: if true;
           allow list: if isSchoolTeacher(eventId, schoolId) || isAdmin();
-          allow create: if isAdmin() && validClassWrite(eventId, schoolId, classId);
+          allow create: if canManageSchool(eventId, schoolId) && validClassWrite(eventId, schoolId, classId);
           allow update: if (isAdmin() && validClassWrite(eventId, schoolId, classId))
             || (canManageSchool(eventId, schoolId) && validClassJoinSettingsUpdate());
           allow delete: if false;

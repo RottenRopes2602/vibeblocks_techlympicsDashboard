@@ -1,7 +1,8 @@
 import { FirebaseError } from 'firebase/app'
-import { signInAnonymously } from 'firebase/auth'
+import { deleteUser, signInAnonymously } from 'firebase/auth'
 import {
   Timestamp,
+  arrayRemove,
   arrayUnion,
   collection,
   deleteField,
@@ -40,7 +41,9 @@ import type {
   RoleDoc,
   SchoolDoc,
   SchoolPath,
+  TeacherBinding,
   TeacherSchoolView,
+  AdminInviteDoc,
 } from './types'
 import { auth, db } from '../lib/firebase'
 
@@ -184,9 +187,28 @@ function asRole(snap: QueryDocumentSnapshot<DocumentData> | { id: string; data()
   }
 }
 
+function asTeacherBinding(snap: QueryDocumentSnapshot<DocumentData> | { id: string; data(): DocumentData }): TeacherBinding {
+  const data = snap.data()
+  return {
+    uid: snap.id,
+    email: data.email,
+    boundAt: toIso(data.boundAt),
+  }
+}
+
+function asAdminInvite(snap: QueryDocumentSnapshot<DocumentData> | { id: string; data(): DocumentData }): AdminInviteDoc {
+  const data = snap.data()
+  return {
+    code: snap.id,
+    usedBy: data.usedBy ?? null,
+    createdAt: toIso(data.createdAt),
+  }
+}
+
 function mapError(error: unknown): never {
   if (error instanceof Error && /^[A-Z_]+$/.test(error.message)) throw error
   if (error instanceof FirebaseError) {
+    if (error.code === 'auth/requires-recent-login') throw new Error('REAUTH_REQUIRED')
     if (error.code === 'permission-denied') throw new Error('FORBIDDEN')
     if (error.code === 'not-found') throw new Error('NOT_FOUND')
     if (error.code === 'already-exists') throw new Error('ALREADY_EXISTS')
@@ -364,7 +386,7 @@ export function createFirestoreApi(): CompetitionApi {
         name: entry.name,
         status: entry.status,
         bests: publicBests(entry.bests),
-      completedCount: completedCount(entry.bests),
+        completedCount: completedCount(entry.bests),
         averageSec: avg,
         attemptsUsed: attemptsUsedFromBests(entry.bests),
       }
@@ -479,6 +501,8 @@ export function createFirestoreApi(): CompetitionApi {
           classId: mapping.classId,
           participantId: mapping.participantId,
         }
+        const participant = await readParticipant(path)
+        if (participant.status === 'rejected') throw new Error('REJECTED')
         await setDoc(doc(db, 'recoveryCodes', recoveryHash, 'claims', uid), { claimedAt: serverTimestamp() })
         await updateDoc(participantRef(path), { ownerUid: uid })
         const classSnap = await getDoc(classRef(path))
@@ -594,6 +618,7 @@ export function createFirestoreApi(): CompetitionApi {
     async bindTeacherSchool(code) {
       try {
         const uid = await ensureUser()
+        const email = auth.currentUser?.email ?? undefined
         const normalized = normalizeCode(code)
         const mappingSnap = await getDoc(doc(db, 'teacherCodes', normalized))
         if (!mappingSnap.exists()) throw new Error('TEACHER_CODE_NOT_FOUND')
@@ -603,23 +628,25 @@ export function createFirestoreApi(): CompetitionApi {
         const roleSnap = await getDoc(roleRef)
         const batch = writeBatch(db)
         batch.set(doc(db, 'events', path.eventId, 'schools', path.schoolId, 'teachers', uid), {
-          code: normalized,
+          ...clean({ code: normalized, email }),
           boundAt: serverTimestamp(),
         })
         if (roleSnap.exists()) {
-          batch.update(roleRef, {
+          batch.update(roleRef, clean({
             role: 'teacher',
+            email,
             schoolPaths: arrayUnion(path),
-          })
+          }))
         } else {
-          batch.set(roleRef, {
+          batch.set(roleRef, clean({
             role: 'teacher',
+            email,
             createdAt: serverTimestamp(),
             code: normalized,
             eventId: path.eventId,
             schoolId: path.schoolId,
             schoolPaths: [path],
-          })
+          }))
         }
         await batch.commit()
         return path
@@ -930,11 +957,12 @@ export function createFirestoreApi(): CompetitionApi {
         if (!inviteSnap.exists() || inviteSnap.data().usedBy !== null) throw new Error('INVITE_NOT_FOUND')
         const batch = writeBatch(db)
         batch.update(doc(db, 'adminInvites', normalized), { usedBy: uid })
-        batch.set(doc(db, 'roles', uid), {
+        batch.set(doc(db, 'roles', uid), clean({
           role: 'admin',
+          email: auth.currentUser?.email ?? undefined,
           inviteCode: normalized,
           createdAt: serverTimestamp(),
-        })
+        }))
         await batch.commit()
       } catch (error) {
         return mapError(error)
@@ -1025,24 +1053,103 @@ export function createFirestoreApi(): CompetitionApi {
       }
     },
 
-    // ---------- v4 — TODO(vb-116-api-rules-v4): 실구현 + rules ----------
-    async addClass() {
-      throw new Error('NOT_IMPLEMENTED_V4')
+    async addClass(path, name) {
+      try {
+        await ensureUser()
+        const trimmedName = name.trim()
+        if (!trimmedName) throw new Error('INVALID_CLASS_NAME')
+        const schoolSnap = await getDoc(schoolRef(path))
+        if (!schoolSnap.exists()) throw new Error('SCHOOL_NOT_FOUND')
+        const school = asSchool(schoolSnap, path.eventId)
+        const classSnaps = await getDocs(collection(db, 'events', path.eventId, 'schools', path.schoolId, 'classes'))
+        if (classSnaps.docs.some((snap) => String(snap.data().name).trim() === trimmedName)) throw new Error('DUPLICATE_CLASS')
+
+        const classDoc = doc(collection(db, 'events', path.eventId, 'schools', path.schoolId, 'classes'))
+        const joinCode = await getUniqueCode(newJoinCode, 'joinCodes')
+        const classInfo: ClassDoc = {
+          id: classDoc.id,
+          eventId: path.eventId,
+          schoolId: path.schoolId,
+          name: trimmedName,
+          joinCode,
+          joinActive: true,
+          createdAt: nowIso(),
+        }
+        const batch = writeBatch(db)
+        batch.set(classDoc, { ...classInfo, createdAt: serverTimestamp() })
+        batch.set(doc(db, 'joinCodes', joinCode), clean({
+          eventId: path.eventId,
+          schoolId: path.schoolId,
+          classId: classInfo.id,
+          schoolName: school.name,
+          className: classInfo.name,
+          state: school.state,
+          zone: school.zone,
+          createdAt: serverTimestamp(),
+        }))
+        await batch.commit()
+        return classInfo
+      } catch (error) {
+        return mapError(error)
+      }
     },
-    async listSchoolTeachers() {
-      throw new Error('NOT_IMPLEMENTED_V4')
+    async listSchoolTeachers(path) {
+      try {
+        await ensureUser()
+        const snaps = await getDocs(collection(db, 'events', path.eventId, 'schools', path.schoolId, 'teachers'))
+        return snaps.docs.map(asTeacherBinding).sort((a, b) => a.boundAt.localeCompare(b.boundAt))
+      } catch (error) {
+        return mapError(error)
+      }
     },
-    async revokeTeacherBinding() {
-      throw new Error('NOT_IMPLEMENTED_V4')
+    async revokeTeacherBinding(path, uid) {
+      try {
+        await ensureUser()
+        const batch = writeBatch(db)
+        batch.delete(doc(db, 'events', path.eventId, 'schools', path.schoolId, 'teachers', uid))
+        batch.update(doc(db, 'roles', uid), { schoolPaths: arrayRemove(path) })
+        await batch.commit()
+      } catch (error) {
+        return mapError(error)
+      }
     },
     async listAdminInvites() {
-      throw new Error('NOT_IMPLEMENTED_V4')
+      try {
+        await ensureUser()
+        const snaps = await getDocs(collection(db, 'adminInvites'))
+        return snaps.docs.map(asAdminInvite).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      } catch (error) {
+        return mapError(error)
+      }
     },
-    async deleteAdminInvite() {
-      throw new Error('NOT_IMPLEMENTED_V4')
+    async deleteAdminInvite(code) {
+      try {
+        await ensureUser()
+        await deleteDoc(doc(db, 'adminInvites', normalizeCode(code)))
+      } catch (error) {
+        return mapError(error)
+      }
     },
     async deleteMyAccount() {
-      throw new Error('NOT_IMPLEMENTED_V4')
+      try {
+        await auth.authStateReady()
+        const user = auth.currentUser
+        if (!user || user.isAnonymous) throw new Error('FORBIDDEN')
+        const roleSnap = await getDoc(doc(db, 'roles', user.uid))
+        const batch = writeBatch(db)
+        if (roleSnap.exists()) {
+          const role = roleSnap.data() as RoleWithSchools
+          const schoolPaths = role.schoolPaths ?? (role.eventId && role.schoolId ? [{ eventId: role.eventId, schoolId: role.schoolId }] : [])
+          for (const path of schoolPaths) {
+            batch.delete(doc(db, 'events', path.eventId, 'schools', path.schoolId, 'teachers', user.uid))
+          }
+          batch.delete(doc(db, 'roles', user.uid))
+        }
+        await batch.commit()
+        await deleteUser(user)
+      } catch (error) {
+        return mapError(error)
+      }
     },
 
     async getMyRole() {
@@ -1050,7 +1157,13 @@ export function createFirestoreApi(): CompetitionApi {
         const user = auth.currentUser
         if (!user || user.isAnonymous) return null
         const snap = await getDoc(doc(db, 'roles', user.uid))
-        return snap.exists() ? asRole(snap) : null
+        if (!snap.exists()) return null
+        const role = asRole(snap)
+        if (!role.email && user.email) {
+          await updateDoc(doc(db, 'roles', user.uid), { email: user.email })
+          return { ...role, email: user.email }
+        }
+        return role
       } catch (error) {
         return mapError(error)
       }

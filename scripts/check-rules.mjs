@@ -124,6 +124,13 @@ async function seedFixture() {
     teacherCode: 'T-GOOD2345',
     createdAt: startsAt,
   })
+  await adminWrite(`events/${eventId}/schools/s2`, {
+    id: 's2',
+    eventId,
+    name: 'Other School',
+    teacherCode: 'T-OTHR2345',
+    createdAt: startsAt,
+  })
   await adminWrite(`events/${eventId}/schools/s1/classes/cls1`, {
     id: 'cls1',
     eventId,
@@ -145,8 +152,11 @@ async function seedFixture() {
   await adminWrite(`events/${eventId}/schools/s1/classes/cls1/participants/p1`, participant('p1', 'u1', 'P-2222'))
   await adminWrite(`events/${eventId}/schools/s1/classes/cls1/participants/p2`, participant('p2', 'u2', 'P-3333'))
   await adminWrite(`events/${eventId}/schools/s1/classes/cls1/participants/p-withdrawn`, participant('p-withdrawn', 'u1', 'P-5555', { status: 'withdrawn' }))
+  await adminWrite(`events/${eventId}/schools/s1/classes/cls1/participants/p-rejected`, participant('p-rejected', 'u1', 'P-9999', { status: 'rejected' }))
   await adminWrite(`events/${eventId}/schools/s1/teachers/t1`, { code: 'T-GOOD2345', boundAt: startsAt })
   await adminWrite('roles/t1', { role: 'teacher', createdAt: startsAt })
+  await adminWrite('roles/master1', { role: 'master', createdAt: startsAt })
+  await adminWrite(`adminInvites/V-${run}ABC`, { createdBy: 'master1', usedBy: null, createdAt: startsAt })
 
   await adminWrite(`events/${frozenEventId}`, event({ id: frozenEventId, frozen: true }))
   await adminWrite(`events/${frozenEventId}/schools/s1/classes/cls1/participants/p1`, {
@@ -307,6 +317,23 @@ async function main() {
     }),
   )
 
+  await expectDenied('rejected participant owner revive denied', () =>
+    request('PATCH', `events/${eventId}/schools/s1/classes/cls1/participants/p-rejected`, 'u1', {
+      ...participant('p-rejected', 'u1', 'P-9999', {
+        status: 'pending',
+        statusHistory: [{ status: 'pending', at: new Date(), by: 'u1' }],
+      }),
+    }),
+  )
+
+  await expectAllowed('same owner new participant after rejected allowed', () =>
+    request('PATCH', `events/${eventId}/schools/s1/classes/cls1/participants/p-rejoin`, 'u1', {
+      ...participant('p-rejoin', 'u1', 'P-9911', {
+        status: 'pending',
+      }),
+    }),
+  )
+
   await expectDenied('student changes class joinCode', () =>
     request('PATCH', `events/${eventId}/schools/s1/classes/cls1`, 'u1', {
       id: 'cls1',
@@ -316,6 +343,41 @@ async function main() {
       joinCode: 'HACK34',
       joinActive: true,
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    }),
+  )
+
+  await expectAllowed('teacher creates class in own school', () =>
+    request('PATCH', `events/${eventId}/schools/s1/classes/teacher-cls-${run}`, 't1', {
+      id: `teacher-cls-${run}`,
+      eventId,
+      schoolId: 's1',
+      name: 'Teacher Class',
+      joinCode: 'TCH234',
+      joinActive: true,
+      createdAt: new Date(),
+    }),
+  )
+
+  await expectAllowed('teacher creates joinCode in own school', () =>
+    request('PATCH', `joinCodes/TCH234`, 't1', {
+      eventId,
+      schoolId: 's1',
+      classId: `teacher-cls-${run}`,
+      schoolName: 'School',
+      className: 'Teacher Class',
+      createdAt: new Date(),
+    }),
+  )
+
+  await expectDenied('teacher creates class in other school', () =>
+    request('PATCH', `events/${eventId}/schools/s2/classes/other-cls-${run}`, 't1', {
+      id: `other-cls-${run}`,
+      eventId,
+      schoolId: 's2',
+      name: 'Other Class',
+      joinCode: 'OTH234',
+      joinActive: true,
+      createdAt: new Date(),
     }),
   )
 
@@ -380,6 +442,10 @@ async function main() {
       role: 'master',
       createdAt: new Date(),
     }),
+  )
+
+  await expectDenied('teacher deletes admin invite', () =>
+    request('DELETE', `adminInvites/V-${run}ABC`, 't1'),
   )
 }
 
