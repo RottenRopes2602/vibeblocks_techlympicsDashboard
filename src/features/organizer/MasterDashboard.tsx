@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../../api'
 import type { AdminInviteDoc, Role, RoleDoc } from '../../api/types'
 import { useToast } from '../../lib/toast'
@@ -155,6 +156,11 @@ export default function MasterDashboard() {
           <button className="ops-button" disabled={refreshing} onClick={() => void refresh()}>{refreshing ? 'Refreshing...' : 'Refresh'}</button>
         </div>
       </div>
+
+      <nav className="ops-tabs ops-console-switcher" aria-label="Console switcher">
+        <span className="ops-tab active" aria-current="page">Master Console</span>
+        <Link className="ops-tab" to="/admin">Admin Console</Link>
+      </nav>
 
       {error && <div className="ops-alert">{error}</div>}
       {notice && <div className="ops-alert ops-success">{notice}</div>}

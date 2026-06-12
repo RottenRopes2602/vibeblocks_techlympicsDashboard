@@ -83,12 +83,16 @@
 
 .ops-button,
 .ops-tab {
+  align-items: center;
   border: 1px solid #b9c5d4;
   background: #ffffff;
   color: #172033;
   cursor: pointer;
+  display: inline-flex;
   font-weight: 700;
+  justify-content: center;
   padding: 8px 12px;
+  text-decoration: none;
 }
 
 .ops-button:hover,
@@ -284,6 +288,18 @@
   min-width: min(420px, 100%);
 }
 
+.ops-filter-bar.participants {
+  grid-template-columns: minmax(180px, 1fr) minmax(140px, 180px) minmax(220px, 1fr);
+  min-width: 0;
+}
+
+.ops-inline-form {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1fr) auto;
+}
+
 .ops-nested-section {
   background: #ffffff;
   border: 1px solid #e3e8ef;
@@ -406,6 +422,7 @@
   .ops-grid,
   .ops-form.two,
   .ops-form.three,
+  .ops-inline-form,
   .ops-filter-bar,
   .ops-stat-grid {
     grid-template-columns: 1fr;
