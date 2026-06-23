@@ -1,0 +1,31 @@
+# vb-344: main push → Vercel 프로덕션 자동배포 (techlympics-dashboard → vibeblocks.co/techlympics)
+# Vercel 네이티브 git연동은 Hobby 플랜이 org repo를 막아 CLI 배포로 우회한다.
+# 필요한 시크릿: VERCEL_TOKEN. 빌드·env(VITE_*)는 Vercel 프로젝트 설정에서 원격 빌드 시 주입.
+name: Deploy (Vercel Production)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: vercel-prod
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: team_91h5lRX85CaX8qmlVlV8GCtr
+      VERCEL_PROJECT_ID: prj_bEZBiR62yjeNaaFqKubGgLrezOCh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install Vercel CLI
+        run: npm i -g vercel@latest
+      - name: Deploy to Vercel (production)
+        run: vercel deploy --prod --yes --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
