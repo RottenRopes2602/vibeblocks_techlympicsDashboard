@@ -1,11 +1,13 @@
-# vb-344: main push → Vercel 프로덕션 자동배포 (techlympics-dashboard → vibeblocks.co/techlympics)
+# vb-344/vb-351: production push → Vercel 프로덕션 배포 (techlympics-dashboard → vibeblocks.co/techlympics)
+# vb-351 게이트: main은 통합 기준점(라이브 아님). production 브랜치 push만 라이브 배포.
+#   출시 = main → production 승격(push). 긴급 수동은 workflow_dispatch.
 # Vercel 네이티브 git연동은 Hobby 플랜이 org repo를 막아 CLI 배포로 우회한다.
 # 필요한 시크릿: VERCEL_TOKEN. 빌드·env(VITE_*)는 Vercel 프로젝트 설정에서 원격 빌드 시 주입.
 name: Deploy (Vercel Production)
 
 on:
   push:
-    branches: [main]
+    branches: [production]
   workflow_dispatch:
 
 concurrency:
