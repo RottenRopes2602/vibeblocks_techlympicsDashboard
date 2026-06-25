@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import type { User } from 'firebase/auth'
 import { Navigate } from 'react-router-dom'
 import { api } from '../../api'
 import type { Role, RoleDoc } from '../../api/types'
@@ -14,14 +15,24 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+export type ConsoleEntryContext = {
+  user: User | null
+  role: RoleDoc | null
+  isSignedIn: boolean
+  onRoleChanged: () => void | Promise<void>
+}
+
 export default function ConsoleGate({
   label,
   allowedRoles,
   children,
+  entry,
 }: {
   label: string
   allowedRoles: Role[]
   children: ReactNode
+  /** 미인증/무권한일 때 기본(/ 리다이렉트·RoleLanding) 대신 띄울 콘솔 전용 진입 화면 */
+  entry?: (ctx: ConsoleEntryContext) => ReactNode
 }) {
   const t = useT()
   const { user, loading: authLoading, isSignedIn } = useAuthSession()
@@ -83,6 +94,13 @@ export default function ConsoleGate({
   }
 
   if (!isSignedIn) {
+    if (entry) {
+      return (
+        <section className="auth-stack">
+          {entry({ user, role, isSignedIn, onRoleChanged: refreshRole })}
+        </section>
+      )
+    }
     return <Navigate to="/" replace />
   }
 
@@ -96,6 +114,13 @@ export default function ConsoleGate({
   }
 
   if (!role || !allowedRoles.includes(role.role)) {
+    if (entry) {
+      return (
+        <section className="auth-stack">
+          {entry({ user, role, isSignedIn, onRoleChanged: refreshRole })}
+        </section>
+      )
+    }
     return (
       <section className="auth-stack">
         <AuthHeader user={user} role={role} label={label} onRefresh={refreshRole} />
