@@ -2,6 +2,11 @@
   min-height: 100vh;
   padding: 24px;
   color: #172033;
+  /* 어드민은 데이터 밀도가 높아 전역 main(1200px)보다 넓게 — 표가 잘리거나
+     가로스크롤 나지 않게 작업 영역 확보. (.ops-shell 이 곧 <main>) */
+  max-width: 1440px;
+  margin-inline: auto;
+  width: 100%;
 }
 
 .ops-workspace,
@@ -51,7 +56,7 @@
 
 .ops-grid {
   display: grid;
-  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
   gap: 16px;
 }
 
@@ -174,7 +179,7 @@
 .ops-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 760px;
+  min-width: 860px;
 }
 
 .ops-table.compact {
@@ -187,7 +192,10 @@
   padding: 9px 8px;
   text-align: left;
   vertical-align: top;
-  overflow-wrap: anywhere;
+  /* 단어 경계에서만 줄바꿈 — 'Kedah'/'Selangor'/'Registered' 같은 단어를 글자 단위로
+     쪼개지 않는다. 열이 좁으면 .ops-table-wrap 의 가로 스크롤로 흘려보낸다.
+     긴 토큰(UID·코드)만 .ops-table code 규칙이 따로 break 한다. */
+  overflow-wrap: normal;
   word-break: normal;
 }
 
@@ -241,6 +249,7 @@
   font-size: 12px;
   font-weight: 700;
   padding: 3px 8px;
+  white-space: nowrap; /* 'Registered' 같은 상태 배지가 'Registere d' 로 깨지지 않게 */
 }
 
 .ops-pill.warn {

@@ -4,6 +4,7 @@ import { Navigate } from 'react-router-dom'
 import { api } from '../../api'
 import type { Role, RoleDoc } from '../../api/types'
 import { useT } from '../../lib/i18n'
+import { devConsoleRole } from '../../lib/devAuth'
 import AuthHeader from './AuthHeader'
 import RoleLanding from './RoleLanding'
 import { useAuthSession } from './session'
@@ -48,6 +49,27 @@ export default function ConsoleGate({
     if (authLoading) return
     void refreshRole()
   }, [authLoading, isSignedIn, user?.uid])
+
+  // DEV 우회 (mock 전용, production 빌드에서 비활성) — 로그인 없이 콘솔 진입
+  const devRole = devConsoleRole(allowedRoles)
+  if (devRole) {
+    return (
+      <>
+        <div
+          style={{
+            background: '#b91c1c',
+            color: '#fff',
+            font: '600 12px/1.4 system-ui, sans-serif',
+            padding: '4px 12px',
+            textAlign: 'center',
+          }}
+        >
+          DEV · mock · {devRole} — 로그인 우회 중 (배포본에는 없음)
+        </div>
+        {children}
+      </>
+    )
+  }
 
   if (authLoading || roleLoading) {
     return (
