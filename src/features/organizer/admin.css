@@ -515,6 +515,102 @@
   }
 }
 
+/* 학교 마스터-디테일 — 좌측 학교 리스트 / 우측 선택 학교 상세 (3중 중첩 제거) */
+.ops-schools-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  margin-top: 12px;
+}
+
+.ops-schools-list {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.ops-school-item {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #172033;
+  cursor: pointer;
+  padding: 10px 12px;
+}
+
+.ops-school-item:hover {
+  border-color: #526b91;
+}
+
+.ops-school-item.active {
+  border-color: #1f6feb;
+  box-shadow: inset 3px 0 0 #1f6feb;
+  background: #f5f9ff;
+}
+
+.ops-school-item-meta {
+  color: #5f6b7a;
+  font-size: 12px;
+}
+
+.ops-school-detail {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid #e3e8ef;
+  border-radius: 8px;
+  padding: 14px;
+  background: #fbfdff;
+}
+
+.ops-school-detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ops-school-detail-head h3 {
+  margin: 0 0 2px;
+}
+
+.ops-school-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ops-school-code {
+  font-size: 13px;
+  color: #344154;
+}
+
+.ops-school-empty {
+  display: grid;
+  place-items: center;
+  min-height: 160px;
+  padding: 24px;
+}
+
+@media (max-width: 920px) {
+  .ops-schools-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-schools-list {
+    max-height: none;
+  }
+}
+
 .ops-file-picker {
   align-items: center;
   display: flex;
