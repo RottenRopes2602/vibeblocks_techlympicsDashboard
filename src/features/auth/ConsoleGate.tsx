@@ -5,7 +5,7 @@ import { Navigate } from 'react-router-dom'
 import { api } from '../../api'
 import type { Role, RoleDoc } from '../../api/types'
 import { useT } from '../../lib/i18n'
-import { devConsoleRole } from '../../lib/devAuth'
+import { clearDevRole, devConsoleRole } from '../../lib/devAuth'
 import AuthHeader from './AuthHeader'
 import RoleLanding from './RoleLanding'
 import { useAuthSession } from './session'
@@ -73,9 +73,32 @@ export default function ConsoleGate({
             font: '600 12px/1.4 system-ui, sans-serif',
             padding: '4px 12px',
             textAlign: 'center',
+            display: 'flex',
+            gap: '12px',
+            justifyContent: 'center',
+            alignItems: 'center',
           }}
         >
-          DEV · mock · {devRole} — 로그인 우회 중 (배포본에는 없음)
+          <span>DEV · mock · {devRole} — 로그인 우회 중 (배포본에는 없음)</span>
+          <button
+            type="button"
+            onClick={() => {
+              clearDevRole()
+              // ?dev= 쿼리 제거하고 진입 화면으로 (재설정 방지)
+              window.location.href = window.location.pathname
+            }}
+            style={{
+              background: 'rgba(255,255,255,0.18)',
+              border: '1px solid rgba(255,255,255,0.6)',
+              color: '#fff',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              font: 'inherit',
+              padding: '1px 8px',
+            }}
+          >
+            우회 끄기 / 로그인 화면
+          </button>
         </div>
         {children}
       </>

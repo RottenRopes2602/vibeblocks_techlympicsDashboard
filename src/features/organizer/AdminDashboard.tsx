@@ -25,7 +25,7 @@ import { useToast } from '../../lib/toast'
 import { sampleImportRows } from './fixtures/sampleImportRows'
 import './admin.css'
 
-type AdminTab = 'events' | 'import' | 'schools' | 'participants'
+type AdminTab = 'participants' | 'rankings' | 'schools' | 'events' | 'import'
 type ImportField = 'schoolName' | 'level' | 'state' | 'zone'
 type AdminSchoolView = Awaited<ReturnType<typeof api.listEventSchools>>[number]
 type SearchParamSetter = ReturnType<typeof useSearchParams>[1]
@@ -80,10 +80,21 @@ const MALAYSIA_STATES = [
   'W.P. Labuan',
   'W.P. Putrajaya',
 ]
-const adminTabs: AdminTab[] = ['events', 'import', 'schools', 'participants']
+// 학생·랭킹을 앞으로, 이벤트 설정/임포트(설정성)는 뒤로 — 일상 동선 우선
+const adminTabs: AdminTab[] = ['participants', 'rankings', 'schools', 'events', 'import']
 
 function parseAdminTab(value: string | null): AdminTab {
-  return adminTabs.includes(value as AdminTab) ? (value as AdminTab) : 'events'
+  return adminTabs.includes(value as AdminTab) ? (value as AdminTab) : 'participants'
+}
+
+function adminTabLabel(item: AdminTab, t: TFunction): string {
+  switch (item) {
+    case 'participants': return t('common.participants')
+    case 'rankings': return t('admin.rankings')
+    case 'schools': return t('common.schools')
+    case 'events': return t('admin.eventSetup')
+    case 'import': return t('admin.import')
+  }
 }
 
 function updateQueryParams(
@@ -359,48 +370,46 @@ export default function AdminDashboard({ embedded = false }: { embedded?: boolea
 
       {error && <div className="ops-alert">{error}</div>}
 
-      <div className="ops-grid">
-        <aside className="ops-panel">
-          <div className="ops-topbar compact">
-            <h2>{t('admin.events')}</h2>
-            <button className="ops-button primary" onClick={openCreateModal}>{t('admin.new')}</button>
-          </div>
-          <div className="ops-event-list">
-            {events.map((event) => (
-              <button
-                className={`ops-event-button ${event.id === selectedEvent?.id ? 'active' : ''}`}
-                key={event.id}
-                onClick={() => void refresh(event.id)}
-              >
-                <strong>{event.name}</strong>
-                <br />
-                <span className="ops-subtle">{toDateTimeLocal(event.startsAt)} - {toDateTimeLocal(event.endsAt)}</span>
-                <br />
-                <span className={`ops-pill ${event.frozen ? 'warn' : 'ok'}`}>{event.frozen ? t('common.frozen') : t('common.open')}</span>
-              </button>
-            ))}
-          </div>
-        </aside>
-
-        <section className="ops-stack">
+      <div className="ops-stack">
           <div className="ops-panel">
             <div className="ops-topbar">
               <div>
                 <h2>{selectedEvent?.name ?? t('admin.noEventSelected')}</h2>
                 <p className="ops-subtle">{t('admin.eventPeriodNote')}</p>
               </div>
-              {selectedEvent && <span className={`ops-pill ${selectedEvent.frozen ? 'warn' : 'ok'}`}>{selectedEvent.frozen ? t('common.frozen') : t('common.open')}</span>}
+              {/* 이벤트는 좌측 전용 사이드바 대신 상단 셀렉터로 — 데이터 영역에 전폭 양보 */}
+              <div className="ops-event-picker">
+                {selectedEvent && <span className={`ops-pill ${selectedEvent.frozen ? 'warn' : 'ok'}`}>{selectedEvent.frozen ? t('common.frozen') : t('common.open')}</span>}
+                {events.length > 0 && (
+                  <select
+                    className="ops-input"
+                    aria-label={t('admin.events')}
+                    value={selectedEvent?.id ?? ''}
+                    onChange={(e) => void refresh(e.target.value)}
+                  >
+                    {events.map((event) => (
+                      <option key={event.id} value={event.id}>
+                        {event.name}{event.frozen ? ` (${t('common.frozen')})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button className="ops-button primary" onClick={openCreateModal}>{t('admin.new')}</button>
+              </div>
             </div>
             <div className="ops-tabs">
               {adminTabs.map((item) => (
                 <button className={`ops-tab ${tab === item ? 'active' : ''}`} key={item} onClick={() => selectTab(item)}>
-                  {item === 'events' ? t('admin.eventSetup') : item === 'import' ? t('admin.import') : item === 'schools' ? t('common.schools') : t('common.participants')}
+                  {adminTabLabel(item, t)}
                 </button>
               ))}
             </div>
           </div>
 
           {stats && <StatsPanel stats={stats} />}
+          {tab === 'rankings' && selectedEvent && (
+            <RankingsPanel event={selectedEvent} schools={schools} />
+          )}
           {tab === 'events' && selectedEvent && (
             <EventEditor
               event={selectedEvent}
@@ -437,7 +446,6 @@ export default function AdminDashboard({ embedded = false }: { embedded?: boolea
           {tab === 'participants' && selectedEvent && (
             <ParticipantsPanel event={selectedEvent} schools={schools} />
           )}
-        </section>
       </div>
 
       {createOpen && (
@@ -1767,5 +1775,89 @@ function LeaderboardTable({ event, rows }: { event: EventDoc; rows: LeaderboardR
         </tbody>
       </table>
     </div>
+  )
+}
+
+// 랭킹 직접 조회 — 학교→반 깊이 드릴 없이 반만 골라 바로 리더보드 (vb-352)
+function RankingsPanel({ event, schools }: { event: EventDoc; schools: AdminSchoolView[] }) {
+  const toast = useToast()
+  const t = useT()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [rows, setRows] = useState<LeaderboardRow[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const classOptions = useMemo(
+    () =>
+      schools.flatMap((school) =>
+        school.classes.map((classStats) => ({
+          key: `${school.school.id}:${classStats.classInfo.id}`,
+          label: `${school.school.name} · ${classStats.classInfo.name}`,
+        })),
+      ),
+    [schools],
+  )
+
+  // 선택 없으면 첫 반 자동 (query 미기록 — 루프 회피)
+  const selectedKey = searchParams.get('rankingClass') || classOptions[0]?.key || ''
+
+  useEffect(() => {
+    if (!selectedKey) {
+      setRows([])
+      return
+    }
+    const [schoolId, classId] = selectedKey.split(':')
+    if (!schoolId || !classId) return
+    let cancelled = false
+    setLoading(true)
+    setError('')
+    void api
+      .getLeaderboardByPath({ eventId: event.id, schoolId, classId }, { includePending: true })
+      .then((result) => {
+        if (!cancelled) setRows(result)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        const message = getErrorMessage(err)
+        setError(message)
+        toast(message, 'error')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [event.id, selectedKey, toast])
+
+  return (
+    <section className="ops-panel">
+      <div className="ops-topbar">
+        <div>
+          <h2>{t('admin.rankings')}</h2>
+          <p className="ops-subtle">{t('admin.rankingsDescription')}</p>
+        </div>
+      </div>
+      {classOptions.length === 0 ? (
+        <p className="ops-subtle">{t('admin.noSchoolsMatch')}</p>
+      ) : (
+        <>
+          <label className="ops-label">
+            {t('admin.selectClass')}
+            <select
+              className="ops-select"
+              value={selectedKey}
+              onChange={(e) => updateQueryParams(searchParams, setSearchParams, { rankingClass: e.target.value || null }, true)}
+            >
+              {classOptions.map((opt) => (
+                <option key={opt.key} value={opt.key}>{opt.label}</option>
+              ))}
+            </select>
+          </label>
+          {error && <div className="ops-alert">{error}</div>}
+          {loading ? <p className="ops-subtle">{t('common.loading')}</p> : <LeaderboardTable event={event} rows={rows} />}
+        </>
+      )}
+    </section>
   )
 }
