@@ -2,6 +2,11 @@
   min-height: 100vh;
   padding: 24px;
   color: #172033;
+  /* 어드민은 데이터 밀도가 높아 전역 main(1200px)보다 넓게 — 표가 잘리거나
+     가로스크롤 나지 않게 작업 영역 확보. (.ops-shell 이 곧 <main>) */
+  max-width: 1440px;
+  margin-inline: auto;
+  width: 100%;
 }
 
 .ops-workspace,
@@ -51,7 +56,7 @@
 
 .ops-grid {
   display: grid;
-  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
   gap: 16px;
 }
 
@@ -76,11 +81,41 @@
   padding: 14px;
 }
 
+/* 진짜 탭바 — 하단 밑줄형(active=파란 밑줄). 칩/버튼처럼 보이던 것을 탭 affordance로. */
 .ops-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 12px 0 0;
+  gap: 4px;
+  margin: 16px 0 0;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.ops-tab {
+  appearance: none;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: #5b6b80;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 700;
+  justify-content: center;
+  margin-bottom: -2px; /* 밑줄이 탭바 baseline 과 겹치게 */
+  padding: 10px 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ops-tab:hover {
+  color: #172033;
+  border-bottom-color: #b9c5d4;
+}
+
+.ops-tab.active {
+  color: #1f6feb;
+  border-bottom-color: #1f6feb;
 }
 
 .ops-console-switcher {
@@ -88,7 +123,6 @@
 }
 
 .ops-button,
-.ops-tab,
 .ops-input,
 .ops-select,
 .ops-file {
@@ -97,8 +131,7 @@
   font: inherit;
 }
 
-.ops-button,
-.ops-tab {
+.ops-button {
   align-items: center;
   border: 1px solid #b9c5d4;
   background: #ffffff;
@@ -111,13 +144,11 @@
   text-decoration: none;
 }
 
-.ops-button:hover,
-.ops-tab:hover {
+.ops-button:hover {
   border-color: #526b91;
 }
 
-.ops-button.primary,
-.ops-tab.active {
+.ops-button.primary {
   background: #1f6feb;
   border-color: #1f6feb;
   color: #ffffff;
@@ -174,7 +205,7 @@
 .ops-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 760px;
+  min-width: 860px;
 }
 
 .ops-table.compact {
@@ -187,7 +218,10 @@
   padding: 9px 8px;
   text-align: left;
   vertical-align: top;
-  overflow-wrap: anywhere;
+  /* 단어 경계에서만 줄바꿈 — 'Kedah'/'Selangor'/'Registered' 같은 단어를 글자 단위로
+     쪼개지 않는다. 열이 좁으면 .ops-table-wrap 의 가로 스크롤로 흘려보낸다.
+     긴 토큰(UID·코드)만 .ops-table code 규칙이 따로 break 한다. */
+  overflow-wrap: normal;
   word-break: normal;
 }
 
@@ -241,6 +275,7 @@
   font-size: 12px;
   font-weight: 700;
   padding: 3px 8px;
+  white-space: nowrap; /* 'Registered' 같은 상태 배지가 'Registere d' 로 깨지지 않게 */
 }
 
 .ops-pill.warn {
@@ -499,11 +534,166 @@
     min-width: 560px;
   }
 
-  .ops-button,
+  .ops-button {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
   .ops-tab {
     padding-left: 10px;
     padding-right: 10px;
   }
+}
+
+/* 이벤트 상단 셀렉터 (좌측 사이드바 대체) */
+.ops-event-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 학교 마스터-디테일 — 좌측 학교 리스트 / 우측 선택 학교 상세 (3중 중첩 제거) */
+/* 학교 목록 = 전폭 세로 리스트. 각 행은 버튼(상세로 이동), 우측에 › 화살표 affordance. */
+.ops-schools-list {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  margin-top: 12px;
+}
+
+.ops-school-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #172033;
+  cursor: pointer;
+  padding: 12px 14px;
+}
+
+.ops-school-item:hover {
+  border-color: #526b91;
+  background: #f5f9ff;
+}
+
+.ops-school-item-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ops-school-item-meta {
+  color: #5f6b7a;
+  font-size: 12px;
+}
+
+.ops-school-item-go {
+  flex: none;
+  font-size: 22px;
+  line-height: 1;
+  color: #8a97a8;
+}
+
+.ops-school-item:hover .ops-school-item-go {
+  color: #1f6feb;
+}
+
+/* 학교 상세 상단 = 뒤로가기 + 이름. */
+.ops-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ops-back-button {
+  flex: none;
+}
+
+.ops-school-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ops-school-code {
+  font-size: 13px;
+  color: #344154;
+}
+
+/* 노션식 필터 바 — 활성 조건 칩 + '조건 추가' 드롭다운 */
+.ops-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ops-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #cfd9e4;
+  border-radius: 999px;
+  background: #f3f7fb;
+  padding: 3px 4px 3px 12px;
+}
+
+.ops-filter-chip-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: #44546a;
+}
+
+.ops-filter-chip-select {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  color: #102030;
+  cursor: pointer;
+  min-height: 28px;
+  max-width: 220px;
+}
+
+.ops-filter-chip-x {
+  border: 0;
+  background: #dde6ef;
+  color: #44546a;
+  cursor: pointer;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 15px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ops-filter-chip-x:hover {
+  background: #c8d4e0;
+  color: #102030;
+}
+
+.ops-filter-add {
+  min-height: 32px;
+  border: 1px dashed #b9c5d4;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #1f6feb;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 12px;
 }
 
 .ops-file-picker {

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import type { User } from 'firebase/auth'
 import { Navigate } from 'react-router-dom'
 import { api } from '../../api'
 import type { Role, RoleDoc } from '../../api/types'
 import { useT } from '../../lib/i18n'
+import { clearDevRole, devConsoleRole } from '../../lib/devAuth'
 import AuthHeader from './AuthHeader'
 import RoleLanding from './RoleLanding'
 import { useAuthSession } from './session'
@@ -13,14 +15,24 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+export type ConsoleEntryContext = {
+  user: User | null
+  role: RoleDoc | null
+  isSignedIn: boolean
+  onRoleChanged: () => void | Promise<void>
+}
+
 export default function ConsoleGate({
   label,
   allowedRoles,
   children,
+  entry,
 }: {
   label: string
   allowedRoles: Role[]
   children: ReactNode
+  /** 미인증/무권한일 때 기본(/ 리다이렉트·RoleLanding) 대신 띄울 콘솔 전용 진입 화면 */
+  entry?: (ctx: ConsoleEntryContext) => ReactNode
 }) {
   const t = useT()
   const { user, loading: authLoading, isSignedIn } = useAuthSession()
@@ -49,6 +61,50 @@ export default function ConsoleGate({
     void refreshRole()
   }, [authLoading, isSignedIn, user?.uid])
 
+  // DEV 우회 (mock 전용, production 빌드에서 비활성) — 로그인 없이 콘솔 진입
+  const devRole = devConsoleRole(allowedRoles)
+  if (devRole) {
+    return (
+      <>
+        <div
+          style={{
+            background: '#b91c1c',
+            color: '#fff',
+            font: '600 12px/1.4 system-ui, sans-serif',
+            padding: '4px 12px',
+            textAlign: 'center',
+            display: 'flex',
+            gap: '12px',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          <span>DEV · mock · {devRole} — 로그인 우회 중 (배포본에는 없음)</span>
+          <button
+            type="button"
+            onClick={() => {
+              clearDevRole()
+              // ?dev= 쿼리 제거하고 진입 화면으로 (재설정 방지)
+              window.location.href = window.location.pathname
+            }}
+            style={{
+              background: 'rgba(255,255,255,0.18)',
+              border: '1px solid rgba(255,255,255,0.6)',
+              color: '#fff',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              font: 'inherit',
+              padding: '1px 8px',
+            }}
+          >
+            우회 끄기 / 로그인 화면
+          </button>
+        </div>
+        {children}
+      </>
+    )
+  }
+
   if (authLoading || roleLoading) {
     return (
       <section className="auth-stack">
@@ -61,6 +117,13 @@ export default function ConsoleGate({
   }
 
   if (!isSignedIn) {
+    if (entry) {
+      return (
+        <section className="auth-stack">
+          {entry({ user, role, isSignedIn, onRoleChanged: refreshRole })}
+        </section>
+      )
+    }
     return <Navigate to="/" replace />
   }
 
@@ -74,6 +137,13 @@ export default function ConsoleGate({
   }
 
   if (!role || !allowedRoles.includes(role.role)) {
+    if (entry) {
+      return (
+        <section className="auth-stack">
+          {entry({ user, role, isSignedIn, onRoleChanged: refreshRole })}
+        </section>
+      )
+    }
     return (
       <section className="auth-stack">
         <AuthHeader user={user} role={role} label={label} onRefresh={refreshRole} />

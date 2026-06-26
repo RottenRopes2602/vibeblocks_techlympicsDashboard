@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import type { User } from 'firebase/auth'
 import { signOut } from 'firebase/auth'
 import { auth } from '../../lib/firebase'
+import { DEV_AUTH_ENABLED, devSignOutUser } from '../../lib/devAuth'
 import { useT } from '../../lib/i18n'
 import { useToast } from '../../lib/toast'
 import TeacherCodeGate from './TeacherCodeGate'
@@ -35,7 +36,8 @@ export default function RoleLanding({
     setError('')
     try {
       window.__mockRole?.(null)
-      await signOut(auth)
+      if (DEV_AUTH_ENABLED) devSignOutUser()
+      else await signOut(auth)
       toast(t('auth.signedOut'), 'success')
       navigate('/', { replace: true })
     } catch (err) {

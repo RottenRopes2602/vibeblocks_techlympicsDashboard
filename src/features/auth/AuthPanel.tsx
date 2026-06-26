@@ -8,6 +8,7 @@ import {
   signInWithPopup,
 } from 'firebase/auth'
 import { auth } from '../../lib/firebase'
+import { DEV_AUTH_ENABLED, devSignIn } from '../../lib/devAuth'
 import type { TFunction } from '../../lib/i18n'
 import { useT } from '../../lib/i18n'
 import { useToast } from '../../lib/toast'
@@ -101,7 +102,8 @@ export default function AuthPanel({
     setBusy(true)
     setError('')
     try {
-      await signInWithPopup(auth, googleProvider)
+      if (DEV_AUTH_ENABLED) devSignIn('dev.google@mock.local')
+      else await signInWithPopup(auth, googleProvider)
       await finish()
       toast(authMode === 'sign-up' ? t('auth.accountReady') : t('auth.signedIn'), 'success')
     } catch (err) {
@@ -118,7 +120,9 @@ export default function AuthPanel({
     setBusy(true)
     setError('')
     try {
-      if (authMode === 'sign-up') {
+      if (DEV_AUTH_ENABLED) {
+        devSignIn(email.trim())
+      } else if (authMode === 'sign-up') {
         await createUserWithEmailAndPassword(auth, email.trim(), password)
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password)

@@ -23,9 +23,10 @@ import type { TFunction } from '../../lib/i18n'
 import { useT } from '../../lib/i18n'
 import { useToast } from '../../lib/toast'
 import { sampleImportRows } from './fixtures/sampleImportRows'
+import { FilterBar, matchingClasses, schoolMatches, useFilters } from './SchoolFilters'
 import './admin.css'
 
-type AdminTab = 'events' | 'import' | 'schools' | 'participants'
+type AdminTab = 'participants' | 'rankings' | 'schools' | 'events' | 'import'
 type ImportField = 'schoolName' | 'level' | 'state' | 'zone'
 type AdminSchoolView = Awaited<ReturnType<typeof api.listEventSchools>>[number]
 type SearchParamSetter = ReturnType<typeof useSearchParams>[1]
@@ -80,10 +81,21 @@ const MALAYSIA_STATES = [
   'W.P. Labuan',
   'W.P. Putrajaya',
 ]
-const adminTabs: AdminTab[] = ['events', 'import', 'schools', 'participants']
+// 학생·랭킹을 앞으로, 이벤트 설정/임포트(설정성)는 뒤로 — 일상 동선 우선
+const adminTabs: AdminTab[] = ['participants', 'rankings', 'schools', 'events', 'import']
 
 function parseAdminTab(value: string | null): AdminTab {
-  return adminTabs.includes(value as AdminTab) ? (value as AdminTab) : 'events'
+  return adminTabs.includes(value as AdminTab) ? (value as AdminTab) : 'participants'
+}
+
+function adminTabLabel(item: AdminTab, t: TFunction): string {
+  switch (item) {
+    case 'participants': return t('common.participants')
+    case 'rankings': return t('admin.rankings')
+    case 'schools': return t('common.schools')
+    case 'events': return t('admin.eventSetup')
+    case 'import': return t('admin.import')
+  }
 }
 
 function updateQueryParams(
@@ -359,48 +371,46 @@ export default function AdminDashboard({ embedded = false }: { embedded?: boolea
 
       {error && <div className="ops-alert">{error}</div>}
 
-      <div className="ops-grid">
-        <aside className="ops-panel">
-          <div className="ops-topbar compact">
-            <h2>{t('admin.events')}</h2>
-            <button className="ops-button primary" onClick={openCreateModal}>{t('admin.new')}</button>
-          </div>
-          <div className="ops-event-list">
-            {events.map((event) => (
-              <button
-                className={`ops-event-button ${event.id === selectedEvent?.id ? 'active' : ''}`}
-                key={event.id}
-                onClick={() => void refresh(event.id)}
-              >
-                <strong>{event.name}</strong>
-                <br />
-                <span className="ops-subtle">{toDateTimeLocal(event.startsAt)} - {toDateTimeLocal(event.endsAt)}</span>
-                <br />
-                <span className={`ops-pill ${event.frozen ? 'warn' : 'ok'}`}>{event.frozen ? t('common.frozen') : t('common.open')}</span>
-              </button>
-            ))}
-          </div>
-        </aside>
-
-        <section className="ops-stack">
+      <div className="ops-stack">
           <div className="ops-panel">
             <div className="ops-topbar">
               <div>
                 <h2>{selectedEvent?.name ?? t('admin.noEventSelected')}</h2>
                 <p className="ops-subtle">{t('admin.eventPeriodNote')}</p>
               </div>
-              {selectedEvent && <span className={`ops-pill ${selectedEvent.frozen ? 'warn' : 'ok'}`}>{selectedEvent.frozen ? t('common.frozen') : t('common.open')}</span>}
+              {/* 이벤트는 좌측 전용 사이드바 대신 상단 셀렉터로 — 데이터 영역에 전폭 양보 */}
+              <div className="ops-event-picker">
+                {selectedEvent && <span className={`ops-pill ${selectedEvent.frozen ? 'warn' : 'ok'}`}>{selectedEvent.frozen ? t('common.frozen') : t('common.open')}</span>}
+                {events.length > 0 && (
+                  <select
+                    className="ops-input"
+                    aria-label={t('admin.events')}
+                    value={selectedEvent?.id ?? ''}
+                    onChange={(e) => void refresh(e.target.value)}
+                  >
+                    {events.map((event) => (
+                      <option key={event.id} value={event.id}>
+                        {event.name}{event.frozen ? ` (${t('common.frozen')})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button className="ops-button primary" onClick={openCreateModal}>{t('admin.new')}</button>
+              </div>
             </div>
             <div className="ops-tabs">
               {adminTabs.map((item) => (
                 <button className={`ops-tab ${tab === item ? 'active' : ''}`} key={item} onClick={() => selectTab(item)}>
-                  {item === 'events' ? t('admin.eventSetup') : item === 'import' ? t('admin.import') : item === 'schools' ? t('common.schools') : t('common.participants')}
+                  {adminTabLabel(item, t)}
                 </button>
               ))}
             </div>
           </div>
 
           {stats && <StatsPanel stats={stats} />}
+          {tab === 'rankings' && selectedEvent && (
+            <RankingsPanel event={selectedEvent} schools={schools} />
+          )}
           {tab === 'events' && selectedEvent && (
             <EventEditor
               event={selectedEvent}
@@ -437,7 +447,6 @@ export default function AdminDashboard({ embedded = false }: { embedded?: boolea
           {tab === 'participants' && selectedEvent && (
             <ParticipantsPanel event={selectedEvent} schools={schools} />
           )}
-        </section>
       </div>
 
       {createOpen && (
@@ -951,12 +960,9 @@ function ImportPanel({
 function ParticipantsPanel({ event, schools }: { event: EventDoc; schools: AdminSchoolView[] }) {
   const toast = useToast()
   const t = useT()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const paramsKey = searchParams.toString()
+  const { values, set, add, remove } = useFilters(schools)
   const [rows, setRows] = useState<ParticipantRow[]>([])
-  const [schoolFilter, setSchoolFilter] = useState(() => searchParams.get('participantSchool') ?? 'all')
-  const [gradeFilter, setGradeFilter] = useState(() => searchParams.get('grade') ?? 'all')
-  const [query, setQuery] = useState(() => searchParams.get('participantQuery') ?? '')
+  const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -993,43 +999,17 @@ function ParticipantsPanel({ event, schools }: { event: EventDoc; schools: Admin
     void loadParticipants()
   }, [event.id, schools])
 
-  useEffect(() => {
-    setSchoolFilter(searchParams.get('participantSchool') ?? 'all')
-    setGradeFilter(searchParams.get('grade') ?? 'all')
-    setQuery(searchParams.get('participantQuery') ?? '')
-  }, [paramsKey])
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      updateQueryParams(searchParams, setSearchParams, { participantQuery: query.trim() || null }, true)
-    }, 250)
-    return () => window.clearTimeout(timer)
-  }, [query, paramsKey, setSearchParams])
-
-  const grades = useMemo(() => {
-    const unique = [...new Set(rows.map((row) => row.grade).filter((grade) => grade !== '-'))]
-    return unique.sort((a, b) => Number(a) - Number(b))
-  }, [rows])
-
   const filteredRows = useMemo(() => {
     const q = normalizedSearch(query)
     return rows.filter((row) => {
-      const schoolMatches = schoolFilter === 'all' || row.school.id === schoolFilter
-      const gradeMatches = gradeFilter === 'all' || row.grade === gradeFilter
-      const queryMatches = !q || normalizedSearch(`${row.participant.name} ${row.participant.publicId}`).includes(q)
-      return schoolMatches && gradeMatches && queryMatches
+      if (!schoolMatches(values, { id: row.school.id, level: row.school.level, state: row.school.state, zone: row.school.zone })) return false
+      if (values.grade && String(row.classInfo.grade) !== values.grade) return false
+      if (values.class && row.classInfo.id !== values.class) return false
+      if (values.status && row.participant.status !== values.status) return false
+      if (q && !normalizedSearch(`${row.participant.name} ${row.participant.publicId}`).includes(q)) return false
+      return true
     })
-  }, [gradeFilter, query, rows, schoolFilter])
-
-  const changeSchoolFilter = (value: string) => {
-    setSchoolFilter(value)
-    updateQueryParams(searchParams, setSearchParams, { participantSchool: value === 'all' ? null : value }, true)
-  }
-
-  const changeGradeFilter = (value: string) => {
-    setGradeFilter(value)
-    updateQueryParams(searchParams, setSearchParams, { grade: value === 'all' ? null : value }, true)
-  }
+  }, [query, rows, values])
 
   return (
     <section className="ops-panel">
@@ -1043,23 +1023,17 @@ function ParticipantsPanel({ event, schools }: { event: EventDoc; schools: Admin
         </button>
       </div>
       {error && <div className="ops-alert">{error}</div>}
-      <div className="ops-filter-bar participants">
-        <label className="ops-label">{t('common.school')}
-          <select className="ops-select" value={schoolFilter} onChange={(event) => changeSchoolFilter(event.target.value)}>
-            <option value="all">{t('admin.allSchools')}</option>
-            {schools.map((school) => <option key={school.school.id} value={school.school.id}>{school.school.name}</option>)}
-          </select>
-        </label>
-        <label className="ops-label">{t('common.grade')}
-          <select className="ops-select" value={gradeFilter} onChange={(event) => changeGradeFilter(event.target.value)}>
-            <option value="all">{t('admin.allGrades')}</option>
-            {grades.map((grade) => <option key={grade} value={grade}>{t('teacher.gradeLabel', { grade })}</option>)}
-          </select>
-        </label>
-        <label className="ops-label">{t('common.search')}
-          <input className="ops-input" value={query} onChange={(event) => setQuery(event.target.value)} />
-        </label>
-      </div>
+      <FilterBar
+        schools={schools}
+        dims={['level', 'state', 'zone', 'school', 'grade', 'class', 'status']}
+        values={values}
+        onSet={set}
+        onAdd={add}
+        onRemove={remove}
+      />
+      <label className="ops-search" style={{ marginTop: 10 }}>{t('common.search')}
+        <input className="ops-input" value={query} onChange={(event) => setQuery(event.target.value)} />
+      </label>
       <div className="ops-table-wrap" style={{ marginTop: 12 }}>
         <table className="ops-table">
           <thead>
@@ -1109,7 +1083,6 @@ function SchoolsPanel({
   const selectedClassId = searchParams.get('class') ?? ''
   const modal = searchParams.get('modal')
   const [query, setQuery] = useState(() => searchParams.get('schoolQuery') ?? '')
-  const expanded = useMemo(() => new Set(selectedSchoolId ? [selectedSchoolId] : []), [selectedSchoolId])
   const [expandedClasses, setExpandedClasses] = useState<Set<string>>(new Set())
   const [teachersBySchool, setTeachersBySchool] = useState<Record<string, TeacherBinding[]>>({})
   const [participantsByClass, setParticipantsByClass] = useState<Record<string, ParticipantDoc[]>>({})
@@ -1125,15 +1098,39 @@ function SchoolsPanel({
   const [error, setError] = useState('')
   const rankingKey = selectedSchoolId && selectedClassId ? `${selectedSchoolId}:${selectedClassId}` : ''
 
+  const { values: filters, set: setFilter, add: addFilter, remove: removeFilter } = useFilters(schools)
+
   const filteredSchools = useMemo(() => {
     const q = normalizedSearch(query)
-    if (!q) return schools
     return schools.filter((school) => {
+      if (!schoolMatches(filters, { id: school.school.id, level: school.school.level, state: school.school.state, zone: school.school.zone })) return false
+      if (!q) return true
       const name = normalizedSearch(school.school.name)
       const state = normalizedSearch(school.school.state)
       return name.includes(q) || state.includes(q)
     })
-  }, [query, schools])
+  }, [query, schools, filters])
+
+  const selectedSchool = useMemo(
+    () => schools.find((school) => school.school.id === selectedSchoolId) ?? null,
+    [schools, selectedSchoolId],
+  )
+
+  // 학교 목록 → 상세: school 쿼리 세팅(push) = 학교 탭이 통째로 상세로 전환. 브라우저 뒤로가기로 목록 복귀.
+  const selectSchool = (schoolId: string) => {
+    updateQueryParams(searchParams, setSearchParams, {
+      tab: 'schools', school: schoolId, class: null, modal: null, teacher: null,
+    }, false)
+  }
+
+  // 상세 → 목록 뒤로가기. 브라우저 뒤로가기와 동일 동작(히스토리 pop), 직접 진입(히스토리 없음)이면 쿼리만 제거.
+  const backToList = () => {
+    if (window.history.length > 1) {
+      window.history.back()
+      return
+    }
+    updateQueryParams(searchParams, setSearchParams, { school: null, class: null, modal: null, teacher: null }, true)
+  }
 
   useEffect(() => {
     setQuery(searchParams.get('schoolQuery') ?? '')
@@ -1159,18 +1156,6 @@ function SchoolsPanel({
     } finally {
       setLoadingTeachersSchoolId('')
     }
-  }
-
-  const toggleExpanded = async (schoolId: string) => {
-    const opening = selectedSchoolId !== schoolId
-    updateQueryParams(searchParams, setSearchParams, {
-      tab: 'schools',
-      school: opening ? schoolId : null,
-      class: null,
-      modal: null,
-      teacher: null,
-    }, false)
-    if (opening && teachersBySchool[schoolId] === undefined) await loadTeachers(schoolId)
   }
 
   useEffect(() => {
@@ -1334,122 +1319,133 @@ function SchoolsPanel({
 
   return (
     <section className="ops-panel">
-      <div className="ops-topbar">
-        <div>
-          <h2>{t('common.schools')}</h2>
-          <p className="ops-subtle">{t('admin.schoolsDescription')}</p>
-        </div>
-        <label className="ops-search">{t('common.search')}<input className="ops-input" value={query} onChange={(e) => setQuery(e.target.value)} /></label>
-      </div>
       {error && <div className="ops-alert">{error}</div>}
-      <div className="ops-table-wrap">
-        <table className="ops-table">
-          <thead>
-            <tr>
-              <th aria-label={t('admin.expand')}></th>
-              <th>{t('common.school')}</th>
-              <th>{t('admin.levelColumn')}</th>
-              <th>{t('common.state')}</th>
-              <th>{t('common.teacherCode')}</th>
-              <th>{t('common.classes')}</th>
-              <th>{t('common.participants')}</th>
-              <th>{t('common.actions')}</th>
-            </tr>
-          </thead>
-          <tbody>
+      {selectedSchool ? (
+        // ===== 학교 상세 (학교 탭이 통째로 상세 화면으로 전환) =====
+        <>
+          <div className="ops-topbar ops-detail-topbar">
+            <div className="ops-detail-head">
+              <button className="ops-button ops-back-button" type="button" onClick={backToList}>
+                <span aria-hidden="true">←</span> {t('common.back')}
+              </button>
+              <div>
+                <h2>{selectedSchool.school.name}</h2>
+                <p className="ops-subtle">
+                  {[selectedSchool.school.state, selectedSchool.school.level ? levelLabel(selectedSchool.school.level, t) : null]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              </div>
+            </div>
+            <div className="ops-school-detail-actions">
+              {!selectedSchool.school.level && (
+                <select
+                  className="ops-input"
+                  aria-label={t('common.schoolLevel')}
+                  value=""
+                  onChange={(e) => e.target.value && void setLevel(selectedSchool.school.id, e.target.value as SchoolLevel)}
+                >
+                  <option value="">{t('common.selectLevel')}</option>
+                  {SCHOOL_LEVELS.map((level) => (
+                    <option key={level} value={level}>{levelLabel(level, t)}</option>
+                  ))}
+                </select>
+              )}
+              <span className="ops-school-code">
+                {t('common.teacherCode')}:{' '}
+                <ShimmerText busy={busySchoolId === selectedSchool.school.id}>
+                  <code>{selectedSchool.school.teacherCode}</code>
+                </ShimmerText>
+              </span>
+              <button className="ops-button" onClick={() => void copyTeacherCode(selectedSchool.school.teacherCode)}>{t('common.copy')}</button>
+              <button
+                className="ops-button"
+                disabled={busySchoolId === selectedSchool.school.id}
+                onClick={() => void resetCode(selectedSchool.school.id)}
+              >
+                {busySchoolId === selectedSchool.school.id ? t('admin.resetting') : t('admin.resetTeacherCode')}
+              </button>
+            </div>
+          </div>
+
+          <AddClassPanel
+            busy={addingClassSchoolId === selectedSchool.school.id}
+            schoolName={selectedSchool.school.name}
+            schoolLevel={selectedSchool.school.level}
+            value={classDrafts[selectedSchool.school.id] ?? ''}
+            grade={gradeDrafts[selectedSchool.school.id] ?? ''}
+            onAdd={() => addClass(selectedSchool.school.id)}
+            onChange={(value) => setClassDrafts((current) => ({ ...current, [selectedSchool.school.id]: value }))}
+            onGradeChange={(value) => setGradeDrafts((current) => ({ ...current, [selectedSchool.school.id]: value }))}
+          />
+          <TeacherBindingsPanel
+            teachers={teachersBySchool[selectedSchool.school.id] ?? []}
+            loading={loadingTeachersSchoolId === selectedSchool.school.id}
+            revokingKey={revokingTeacherKey}
+            schoolId={selectedSchool.school.id}
+            onRevoke={(teacher) => openRevokeTeacher(selectedSchool.school.id, teacher)}
+          />
+          <ClassList
+            event={event}
+            expandedClasses={expandedClasses}
+            loadingParticipantsKey={loadingParticipantsKey}
+            participantsByClass={participantsByClass}
+            rankingKey={rankingKey}
+            rankingRows={rankingRows}
+            school={selectedSchool}
+            busyRankingKey={busyRankingKey}
+            onToggleClass={toggleClass}
+            onViewRanking={viewRanking}
+          />
+        </>
+      ) : (
+        // ===== 학교 목록 (전폭) — 각 행의 버튼을 누르면 상세로 =====
+        <>
+          <div className="ops-topbar">
+            <div>
+              <h2>{t('common.schools')}</h2>
+              <p className="ops-subtle">{t('admin.schoolsDescription')}</p>
+            </div>
+            <label className="ops-search">{t('common.search')}<input className="ops-input" value={query} onChange={(e) => setQuery(e.target.value)} /></label>
+          </div>
+          <FilterBar
+            schools={schools}
+            dims={['level', 'state', 'zone']}
+            values={filters}
+            onSet={setFilter}
+            onAdd={addFilter}
+            onRemove={removeFilter}
+          />
+          <div className="ops-schools-list">
             {filteredSchools.map((school) => {
               const schoolId = school.school.id
-              const isExpanded = expanded.has(schoolId)
               const participantCount = school.classes.reduce((sum, item) => sum + item.participantCount, 0)
+              const meta = [school.school.state, school.school.level ? levelLabel(school.school.level, t) : null]
+                .filter(Boolean)
+                .join(' · ')
               return (
-                <Fragment key={schoolId}>
-                  <tr>
-                    <td>
-                      <button
-                        aria-label={t('admin.expandSchool', { action: isExpanded ? t('admin.collapse') : t('admin.expand'), schoolName: school.school.name })}
-                        className="ops-icon-button"
-                        onClick={() => void toggleExpanded(schoolId)}
-                      >
-                        {isExpanded ? '▾' : '▸'}
-                      </button>
-                    </td>
-                    <td>
-                      <strong>{school.school.name}</strong>
-                    </td>
-                    <td>
-                      {school.school.level ? (
-                        levelLabel(school.school.level, t)
-                      ) : (
-                        <select
-                          className="ops-input"
-                          aria-label={t('common.schoolLevel')}
-                          value=""
-                          onChange={(e) => e.target.value && void setLevel(schoolId, e.target.value as SchoolLevel)}
-                        >
-                          <option value="">{t('common.selectLevel')}</option>
-                          {SCHOOL_LEVELS.map((level) => (
-                            <option key={level} value={level}>{levelLabel(level, t)}</option>
-                          ))}
-                        </select>
-                      )}
-                    </td>
-                    <td>{school.school.state ?? ''}</td>
-                    <td>
-                      <ShimmerText busy={busySchoolId === schoolId}><code>{school.school.teacherCode}</code></ShimmerText>
-                    </td>
-                    <td>{school.classes.length}</td>
-                    <td>{participantCount}</td>
-                    <td>
-                      <div className="ops-row-actions">
-                        <button className="ops-button" onClick={() => void copyTeacherCode(school.school.teacherCode)}>{t('common.copy')}</button>
-                        <button className="ops-button" disabled={busySchoolId === schoolId} onClick={() => void resetCode(schoolId)}>
-                          {busySchoolId === schoolId ? t('admin.resetting') : t('admin.resetTeacherCode')}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  {isExpanded && (
-                    <tr>
-                      <td className="ops-expanded-cell" colSpan={8}>
-                        <AddClassPanel
-                          busy={addingClassSchoolId === schoolId}
-                          schoolName={school.school.name}
-                          schoolLevel={school.school.level}
-                          value={classDrafts[schoolId] ?? ''}
-                          grade={gradeDrafts[schoolId] ?? ''}
-                          onAdd={() => addClass(schoolId)}
-                          onChange={(value) => setClassDrafts((current) => ({ ...current, [schoolId]: value }))}
-                          onGradeChange={(value) => setGradeDrafts((current) => ({ ...current, [schoolId]: value }))}
-                        />
-                        <TeacherBindingsPanel
-                          teachers={teachersBySchool[schoolId] ?? []}
-                          loading={loadingTeachersSchoolId === schoolId}
-                          revokingKey={revokingTeacherKey}
-                          schoolId={schoolId}
-                          onRevoke={(teacher) => openRevokeTeacher(schoolId, teacher)}
-                        />
-                        <ClassList
-                          event={event}
-                          expandedClasses={expandedClasses}
-                          loadingParticipantsKey={loadingParticipantsKey}
-                          participantsByClass={participantsByClass}
-                          rankingKey={rankingKey}
-                          rankingRows={rankingRows}
-                          school={school}
-                          busyRankingKey={busyRankingKey}
-                          onToggleClass={toggleClass}
-                          onViewRanking={viewRanking}
-                        />
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
+                <button
+                  key={schoolId}
+                  type="button"
+                  className="ops-school-item"
+                  aria-label={t('admin.openSchool', { schoolName: school.school.name })}
+                  onClick={() => selectSchool(schoolId)}
+                >
+                  <span className="ops-school-item-main">
+                    <strong>{school.school.name}</strong>
+                    {meta && <span className="ops-school-item-meta">{meta}</span>}
+                    <span className="ops-school-item-meta">
+                      {t('common.classes')} {school.classes.length} · {t('common.participants')} {participantCount}
+                    </span>
+                  </span>
+                  <span className="ops-school-item-go" aria-hidden="true">›</span>
+                </button>
               )
             })}
-          </tbody>
-        </table>
-      </div>
-      {filteredSchools.length === 0 && <p className="ops-subtle">{t('admin.noSchoolsMatch')}</p>}
+            {filteredSchools.length === 0 && <p className="ops-subtle">{t('admin.noSchoolsMatch')}</p>}
+          </div>
+        </>
+      )}
       {pendingRevokeTeacher && (
         <ConfirmModal
           busy={revokingTeacherKey === `${pendingRevokeTeacher.schoolId}:${pendingRevokeTeacher.teacher.uid}`}
@@ -1768,5 +1764,98 @@ function LeaderboardTable({ event, rows }: { event: EventDoc; rows: LeaderboardR
         </tbody>
       </table>
     </div>
+  )
+}
+
+// 랭킹 직접 조회 — 학교→반 깊이 드릴 없이 반만 골라 바로 리더보드 (vb-352)
+// 여러 반의 리더보드를 합쳐 다시 순위 매김 (완료 수 ↓ → 완료분 평균 ↑ → 이름).
+function rerankRows(rows: LeaderboardRow[]): LeaderboardRow[] {
+  const sorted = [...rows].sort((a, b) => {
+    if (a.completedCount !== b.completedCount) return b.completedCount - a.completedCount
+    const aa = a.averageSec
+    const bb = b.averageSec
+    if (aa != null && bb != null && aa !== bb) return aa - bb
+    if (aa == null && bb != null) return 1
+    if (aa != null && bb == null) return -1
+    return a.name.localeCompare(b.name)
+  })
+  let rank = 0
+  return sorted.map((row) => {
+    if (row.completedCount > 0) {
+      rank += 1
+      return { ...row, rank }
+    }
+    return { ...row, rank: null }
+  })
+}
+
+function RankingsPanel({ event, schools }: { event: EventDoc; schools: AdminSchoolView[] }) {
+  const toast = useToast()
+  const t = useT()
+  const { values, set, add, remove } = useFilters(schools)
+  const [rows, setRows] = useState<LeaderboardRow[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const hasLevel = Boolean(values.level)
+  const classes = useMemo(() => matchingClasses(schools, values), [schools, values])
+  const classesKey = classes.map((c) => `${c.schoolId}:${c.classId}`).join(',')
+
+  useEffect(() => {
+    if (!hasLevel) {
+      setRows([])
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    setError('')
+    Promise.all(
+      classes.map((c) => api.getLeaderboardByPath({ eventId: event.id, schoolId: c.schoolId, classId: c.classId }, { includePending: true })),
+    )
+      .then((results) => {
+        if (!cancelled) setRows(rerankRows(results.flat()))
+      })
+      .catch((err) => {
+        if (cancelled) return
+        const message = getErrorMessage(err)
+        setError(message)
+        toast(message, 'error')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+    // classesKey 가 classes(=schools+values) 변화를 대표 — 매 렌더 새 배열로 인한 루프 회피
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event.id, hasLevel, classesKey, toast])
+
+  return (
+    <section className="ops-panel">
+      <div className="ops-topbar">
+        <div>
+          <h2>{t('admin.rankings')}</h2>
+          <p className="ops-subtle">{t('admin.rankingsDescription')}</p>
+        </div>
+      </div>
+      <FilterBar
+        schools={schools}
+        dims={['level', 'state', 'zone', 'school', 'grade', 'class']}
+        values={values}
+        required={['level']}
+        onSet={set}
+        onAdd={add}
+        onRemove={remove}
+      />
+      {error && <div className="ops-alert">{error}</div>}
+      {!hasLevel ? (
+        <p className="ops-subtle">{t('admin.rankingNeedsLevel')}</p>
+      ) : loading ? (
+        <p className="ops-subtle">{t('common.loading')}</p>
+      ) : (
+        <LeaderboardTable event={event} rows={rows} />
+      )}
+    </section>
   )
 }
