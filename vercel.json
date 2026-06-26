@@ -1,4 +1,7 @@
 {
+  "redirects": [
+    { "source": "/techlympics", "destination": "/techlympics/", "permanent": true }
+  ],
   "rewrites": [
     { "source": "/techlympics/:path*", "destination": "/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
