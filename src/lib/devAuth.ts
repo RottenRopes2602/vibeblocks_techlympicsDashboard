@@ -111,4 +111,22 @@ export function devSignIn(email: string): DevUser {
 /** 가짜 로그아웃. */
 export function devSignOutUser(): void {
   setDevUser(null)
+  setDevMockRole(null)
+}
+
+// 가짜 세션이 획득한 mock 역할을 새로고침 너머로 보존 — 실서비스(firestore)에서
+// getMyRole 이 역할을 돌려주는 것과 동일하게, "이미 가입+코드입력한 계정 → 바로
+// 대시보드"를 dev 에서도 재현. mock api 가 init 시 읽고 bind/redeem 시 쓴다.
+const MOCK_ROLE_KEY = 'vb-dev-mock-role'
+
+export function getDevMockRole(): Role | null {
+  if (!DEV_AUTH_ENABLED || typeof window === 'undefined') return null
+  const stored = window.localStorage.getItem(MOCK_ROLE_KEY)
+  return isRole(stored) ? stored : null
+}
+
+export function setDevMockRole(role: Role | null): void {
+  if (!DEV_AUTH_ENABLED || typeof window === 'undefined') return
+  if (role) window.localStorage.setItem(MOCK_ROLE_KEY, role)
+  else window.localStorage.removeItem(MOCK_ROLE_KEY)
 }

@@ -25,8 +25,9 @@ import type {
   TeacherSchoolView,
 } from './types'
 import { CHALLENGE_SLOTS, GRADES_BY_LEVEL } from './types'
-import { newJoinCode, newPublicId, newRecoveryCode, newTeacherCode, newInviteCode, normalizeCode, sha256Hex } from './codes'
+import { classifyCode, newJoinCode, newPublicId, newRecoveryCode, newTeacherCode, newInviteCode, normalizeCode, sha256Hex } from './codes'
 import { averageSec, compareEntries, completedCount, isBetter, recordTimeSec } from './scoring'
+import { DEV_AUTH_ENABLED, getDevMockRole, setDevMockRole } from '../lib/devAuth'
 
 interface Store {
   events: EventDoc[]
@@ -159,6 +160,32 @@ export function createMockApi(): CompetitionApi {
       s.myRole = { uid: s.myRole?.uid ?? uid(), role, createdAt: now() }
       if (role === 'teacher' && s.mySchoolIds.length === 0) s.mySchoolIds = ['sch-kedah']
     }
+  }
+
+  // DEV+mock: 가짜 세션이 이전에 획득한 역할 복원 (새로고침 후에도 바로 대시보드).
+  if (DEV_AUTH_ENABLED) {
+    const persisted = getDevMockRole()
+    if (persisted) {
+      s.myRole = { uid: uid(), role: persisted, createdAt: now() }
+      if (persisted === 'teacher' && s.mySchoolIds.length === 0) s.mySchoolIds = ['sch-kedah']
+    }
+  }
+
+  // DEV+mock: 시드에 없는 교사코드(T-{8})도 형식만 맞으면 즉석 학교 생성해 통과.
+  const ensureMockSchool = (rawCode: string): SchoolDoc => {
+    const code = normalizeCode(rawCode)
+    let school = s.schools.find((x) => x.teacherCode === code)
+    if (!school) {
+      school = {
+        id: `sch-${Math.random().toString(36).slice(2, 8)}`,
+        eventId: s.events[0]?.id ?? 'evt-demo',
+        name: `Mock School (${code})`,
+        teacherCode: code,
+        createdAt: now(),
+      }
+      s.schools.push(school)
+    }
+    return school
   }
 
   const findClassByCode = (joinCode: string): JoinInfo => {
@@ -397,6 +424,7 @@ export function createMockApi(): CompetitionApi {
     async deleteMyAccount() {
       s.myRole = null
       s.mySchoolIds = []
+      if (DEV_AUTH_ENABLED) setDevMockRole(null)
       return delay(undefined)
     },
 
@@ -413,7 +441,8 @@ export function createMockApi(): CompetitionApi {
 
     async validateTeacherCode(code) {
       const c = normalizeCode(code)
-      const school = s.schools.find((x) => x.teacherCode === c)
+      let school = s.schools.find((x) => x.teacherCode === c)
+      if (!school && DEV_AUTH_ENABLED && classifyCode(c) === 'teacher') school = ensureMockSchool(c)
       if (!school) throw new Error('TEACHER_CODE_NOT_FOUND')
       const event = s.events.find((x) => x.id === school.eventId)!
       return delay({ event, school: { id: school.id, name: school.name } })
@@ -421,10 +450,12 @@ export function createMockApi(): CompetitionApi {
 
     async bindTeacherSchool(code) {
       const c = normalizeCode(code)
-      const school = s.schools.find((x) => x.teacherCode === c)
+      let school = s.schools.find((x) => x.teacherCode === c)
+      if (!school && DEV_AUTH_ENABLED && classifyCode(c) === 'teacher') school = ensureMockSchool(c)
       if (!school) throw new Error('TEACHER_CODE_NOT_FOUND')
       if (!s.myRole) s.myRole = { uid: uid(), role: 'teacher', createdAt: now() }
       if (!s.mySchoolIds.includes(school.id)) s.mySchoolIds.push(school.id)
+      if (DEV_AUTH_ENABLED) setDevMockRole('teacher')
       return delay({ eventId: school.eventId, schoolId: school.id })
     },
 
@@ -619,15 +650,19 @@ export function createMockApi(): CompetitionApi {
     },
 
     async validateAdminInvite(code) {
-      if (!s.invites.has(normalizeCode(code))) throw new Error('INVITE_NOT_FOUND')
-      return delay(undefined)
+      const c = normalizeCode(code)
+      // DEV+mock: 발급 안 된 코드라도 형식(V-{10})만 맞으면 통과 — 테스트 편의
+      if (s.invites.has(c) || (DEV_AUTH_ENABLED && classifyCode(c) === 'invite')) return delay(undefined)
+      throw new Error('INVITE_NOT_FOUND')
     },
 
     async redeemAdminInvite(code) {
       const c = normalizeCode(code)
-      if (!s.invites.has(c)) throw new Error('INVITE_NOT_FOUND')
+      const okFormat = DEV_AUTH_ENABLED && classifyCode(c) === 'invite'
+      if (!s.invites.has(c) && !okFormat) throw new Error('INVITE_NOT_FOUND')
       s.invites.delete(c)
       s.myRole = { uid: s.myRole?.uid ?? uid(), role: 'admin', inviteCode: c, createdAt: now() }
+      if (DEV_AUTH_ENABLED) setDevMockRole('admin')
       return delay(undefined)
     },
 
@@ -638,7 +673,10 @@ export function createMockApi(): CompetitionApi {
 
     async revokeRole(uidToRevoke) {
       requireRole(['master'])
-      if (s.myRole?.uid === uidToRevoke) s.myRole = null
+      if (s.myRole?.uid === uidToRevoke) {
+        s.myRole = null
+        if (DEV_AUTH_ENABLED) setDevMockRole(null)
+      }
       return delay(undefined)
     },
 

@@ -44,14 +44,16 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!isSignedIn || !role) return
-    if (role.role === 'master') navigate('/master', { replace: true })
-    else if (role.role === 'admin') navigate('/admin', { replace: true })
-    else if (role.role === 'teacher') navigate('/teacher', { replace: true })
+    // 교사 입구는 teacher·master 만 통과. admin 계정은 잘못된 입구 → 아래 안내(자동이동 X).
+    if (role.role === 'teacher') navigate('/teacher', { replace: true })
+    else if (role.role === 'master') navigate('/master', { replace: true })
   }, [isSignedIn, navigate, role])
 
   const isChecking = authLoading || roleLoading
   // 로그인했는데 역할이 없음 = 가입만 하고 학교 미바인딩 → 교사코드 입력 단계.
   const needsTeacherCode = isSignedIn && !role && !isChecking
+  // 어드민 계정이 교사 입구로 로그인 = 잘못된 입구 → 주최자 콘솔로 안내.
+  const wrongDoor = isSignedIn && role?.role === 'admin' && !isChecking
 
   return (
     <main className={styles.shell}>
@@ -85,6 +87,25 @@ export default function HomePage() {
                     {t('home.organizerEntry')}
                   </button>
                 </div>
+              </>
+            ) : null}
+
+            {/* 어드민 계정이 교사 입구로 들어옴 → 주최자 콘솔로 안내 (교사 입구 거부) */}
+            {wrongDoor ? (
+              <>
+                <AuthHeader user={user} role={role} label={t('home.accountLabel')} onRefresh={refreshRole} />
+                <section className="auth-panel">
+                  <div className="auth-panel-head">
+                    <p className="auth-eyebrow">{t('home.accountLabel')}</p>
+                    <h2>{t('home.organizerAccountTitle')}</h2>
+                    <p>{t('home.organizerAccountBody')}</p>
+                  </div>
+                  <div className="auth-actions">
+                    <button className="auth-button primary" type="button" onClick={() => navigate('/admin')}>
+                      {t('home.organizerEntry')}
+                    </button>
+                  </div>
+                </section>
               </>
             ) : null}
 
