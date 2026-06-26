@@ -23,6 +23,7 @@ import type { TFunction } from '../../lib/i18n'
 import { useT } from '../../lib/i18n'
 import { useToast } from '../../lib/toast'
 import { sampleImportRows } from './fixtures/sampleImportRows'
+import { FilterBar, matchingClasses, schoolMatches, useFilters } from './SchoolFilters'
 import './admin.css'
 
 type AdminTab = 'participants' | 'rankings' | 'schools' | 'events' | 'import'
@@ -959,12 +960,9 @@ function ImportPanel({
 function ParticipantsPanel({ event, schools }: { event: EventDoc; schools: AdminSchoolView[] }) {
   const toast = useToast()
   const t = useT()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const paramsKey = searchParams.toString()
+  const { values, set, add, remove } = useFilters(schools)
   const [rows, setRows] = useState<ParticipantRow[]>([])
-  const [schoolFilter, setSchoolFilter] = useState(() => searchParams.get('participantSchool') ?? 'all')
-  const [gradeFilter, setGradeFilter] = useState(() => searchParams.get('grade') ?? 'all')
-  const [query, setQuery] = useState(() => searchParams.get('participantQuery') ?? '')
+  const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -1001,43 +999,17 @@ function ParticipantsPanel({ event, schools }: { event: EventDoc; schools: Admin
     void loadParticipants()
   }, [event.id, schools])
 
-  useEffect(() => {
-    setSchoolFilter(searchParams.get('participantSchool') ?? 'all')
-    setGradeFilter(searchParams.get('grade') ?? 'all')
-    setQuery(searchParams.get('participantQuery') ?? '')
-  }, [paramsKey])
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      updateQueryParams(searchParams, setSearchParams, { participantQuery: query.trim() || null }, true)
-    }, 250)
-    return () => window.clearTimeout(timer)
-  }, [query, paramsKey, setSearchParams])
-
-  const grades = useMemo(() => {
-    const unique = [...new Set(rows.map((row) => row.grade).filter((grade) => grade !== '-'))]
-    return unique.sort((a, b) => Number(a) - Number(b))
-  }, [rows])
-
   const filteredRows = useMemo(() => {
     const q = normalizedSearch(query)
     return rows.filter((row) => {
-      const schoolMatches = schoolFilter === 'all' || row.school.id === schoolFilter
-      const gradeMatches = gradeFilter === 'all' || row.grade === gradeFilter
-      const queryMatches = !q || normalizedSearch(`${row.participant.name} ${row.participant.publicId}`).includes(q)
-      return schoolMatches && gradeMatches && queryMatches
+      if (!schoolMatches(values, { id: row.school.id, level: row.school.level, state: row.school.state, zone: row.school.zone })) return false
+      if (values.grade && String(row.classInfo.grade) !== values.grade) return false
+      if (values.class && row.classInfo.id !== values.class) return false
+      if (values.status && row.participant.status !== values.status) return false
+      if (q && !normalizedSearch(`${row.participant.name} ${row.participant.publicId}`).includes(q)) return false
+      return true
     })
-  }, [gradeFilter, query, rows, schoolFilter])
-
-  const changeSchoolFilter = (value: string) => {
-    setSchoolFilter(value)
-    updateQueryParams(searchParams, setSearchParams, { participantSchool: value === 'all' ? null : value }, true)
-  }
-
-  const changeGradeFilter = (value: string) => {
-    setGradeFilter(value)
-    updateQueryParams(searchParams, setSearchParams, { grade: value === 'all' ? null : value }, true)
-  }
+  }, [query, rows, values])
 
   return (
     <section className="ops-panel">
@@ -1051,23 +1023,17 @@ function ParticipantsPanel({ event, schools }: { event: EventDoc; schools: Admin
         </button>
       </div>
       {error && <div className="ops-alert">{error}</div>}
-      <div className="ops-filter-bar participants">
-        <label className="ops-label">{t('common.school')}
-          <select className="ops-select" value={schoolFilter} onChange={(event) => changeSchoolFilter(event.target.value)}>
-            <option value="all">{t('admin.allSchools')}</option>
-            {schools.map((school) => <option key={school.school.id} value={school.school.id}>{school.school.name}</option>)}
-          </select>
-        </label>
-        <label className="ops-label">{t('common.grade')}
-          <select className="ops-select" value={gradeFilter} onChange={(event) => changeGradeFilter(event.target.value)}>
-            <option value="all">{t('admin.allGrades')}</option>
-            {grades.map((grade) => <option key={grade} value={grade}>{t('teacher.gradeLabel', { grade })}</option>)}
-          </select>
-        </label>
-        <label className="ops-label">{t('common.search')}
-          <input className="ops-input" value={query} onChange={(event) => setQuery(event.target.value)} />
-        </label>
-      </div>
+      <FilterBar
+        schools={schools}
+        dims={['level', 'state', 'zone', 'school', 'grade', 'class', 'status']}
+        values={values}
+        onSet={set}
+        onAdd={add}
+        onRemove={remove}
+      />
+      <label className="ops-search" style={{ marginTop: 10 }}>{t('common.search')}
+        <input className="ops-input" value={query} onChange={(event) => setQuery(event.target.value)} />
+      </label>
       <div className="ops-table-wrap" style={{ marginTop: 12 }}>
         <table className="ops-table">
           <thead>
@@ -1132,15 +1098,18 @@ function SchoolsPanel({
   const [error, setError] = useState('')
   const rankingKey = selectedSchoolId && selectedClassId ? `${selectedSchoolId}:${selectedClassId}` : ''
 
+  const { values: filters, set: setFilter, add: addFilter, remove: removeFilter } = useFilters(schools)
+
   const filteredSchools = useMemo(() => {
     const q = normalizedSearch(query)
-    if (!q) return schools
     return schools.filter((school) => {
+      if (!schoolMatches(filters, { id: school.school.id, level: school.school.level, state: school.school.state, zone: school.school.zone })) return false
+      if (!q) return true
       const name = normalizedSearch(school.school.name)
       const state = normalizedSearch(school.school.state)
       return name.includes(q) || state.includes(q)
     })
-  }, [query, schools])
+  }, [query, schools, filters])
 
   const selectedSchool = useMemo(
     () => schools.find((school) => school.school.id === selectedSchoolId) ?? null,
@@ -1439,6 +1408,14 @@ function SchoolsPanel({
             </div>
             <label className="ops-search">{t('common.search')}<input className="ops-input" value={query} onChange={(e) => setQuery(e.target.value)} /></label>
           </div>
+          <FilterBar
+            schools={schools}
+            dims={['level', 'state', 'zone']}
+            values={filters}
+            onSet={setFilter}
+            onAdd={addFilter}
+            onRemove={removeFilter}
+          />
           <div className="ops-schools-list">
             {filteredSchools.map((school) => {
               const schoolId = school.school.id
@@ -1791,42 +1768,52 @@ function LeaderboardTable({ event, rows }: { event: EventDoc; rows: LeaderboardR
 }
 
 // 랭킹 직접 조회 — 학교→반 깊이 드릴 없이 반만 골라 바로 리더보드 (vb-352)
+// 여러 반의 리더보드를 합쳐 다시 순위 매김 (완료 수 ↓ → 완료분 평균 ↑ → 이름).
+function rerankRows(rows: LeaderboardRow[]): LeaderboardRow[] {
+  const sorted = [...rows].sort((a, b) => {
+    if (a.completedCount !== b.completedCount) return b.completedCount - a.completedCount
+    const aa = a.averageSec
+    const bb = b.averageSec
+    if (aa != null && bb != null && aa !== bb) return aa - bb
+    if (aa == null && bb != null) return 1
+    if (aa != null && bb == null) return -1
+    return a.name.localeCompare(b.name)
+  })
+  let rank = 0
+  return sorted.map((row) => {
+    if (row.completedCount > 0) {
+      rank += 1
+      return { ...row, rank }
+    }
+    return { ...row, rank: null }
+  })
+}
+
 function RankingsPanel({ event, schools }: { event: EventDoc; schools: AdminSchoolView[] }) {
   const toast = useToast()
   const t = useT()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const { values, set, add, remove } = useFilters(schools)
   const [rows, setRows] = useState<LeaderboardRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const classOptions = useMemo(
-    () =>
-      schools.flatMap((school) =>
-        school.classes.map((classStats) => ({
-          key: `${school.school.id}:${classStats.classInfo.id}`,
-          label: `${school.school.name} · ${classStats.classInfo.name}`,
-        })),
-      ),
-    [schools],
-  )
-
-  // 선택 없으면 첫 반 자동 (query 미기록 — 루프 회피)
-  const selectedKey = searchParams.get('rankingClass') || classOptions[0]?.key || ''
+  const hasLevel = Boolean(values.level)
+  const classes = useMemo(() => matchingClasses(schools, values), [schools, values])
+  const classesKey = classes.map((c) => `${c.schoolId}:${c.classId}`).join(',')
 
   useEffect(() => {
-    if (!selectedKey) {
+    if (!hasLevel) {
       setRows([])
       return
     }
-    const [schoolId, classId] = selectedKey.split(':')
-    if (!schoolId || !classId) return
     let cancelled = false
     setLoading(true)
     setError('')
-    void api
-      .getLeaderboardByPath({ eventId: event.id, schoolId, classId }, { includePending: true })
-      .then((result) => {
-        if (!cancelled) setRows(result)
+    Promise.all(
+      classes.map((c) => api.getLeaderboardByPath({ eventId: event.id, schoolId: c.schoolId, classId: c.classId }, { includePending: true })),
+    )
+      .then((results) => {
+        if (!cancelled) setRows(rerankRows(results.flat()))
       })
       .catch((err) => {
         if (cancelled) return
@@ -1840,7 +1827,9 @@ function RankingsPanel({ event, schools }: { event: EventDoc; schools: AdminScho
     return () => {
       cancelled = true
     }
-  }, [event.id, selectedKey, toast])
+    // classesKey 가 classes(=schools+values) 변화를 대표 — 매 렌더 새 배열로 인한 루프 회피
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event.id, hasLevel, classesKey, toast])
 
   return (
     <section className="ops-panel">
@@ -1850,25 +1839,22 @@ function RankingsPanel({ event, schools }: { event: EventDoc; schools: AdminScho
           <p className="ops-subtle">{t('admin.rankingsDescription')}</p>
         </div>
       </div>
-      {classOptions.length === 0 ? (
-        <p className="ops-subtle">{t('admin.noSchoolsMatch')}</p>
+      <FilterBar
+        schools={schools}
+        dims={['level', 'state', 'zone', 'school', 'grade', 'class']}
+        values={values}
+        required={['level']}
+        onSet={set}
+        onAdd={add}
+        onRemove={remove}
+      />
+      {error && <div className="ops-alert">{error}</div>}
+      {!hasLevel ? (
+        <p className="ops-subtle">{t('admin.rankingNeedsLevel')}</p>
+      ) : loading ? (
+        <p className="ops-subtle">{t('common.loading')}</p>
       ) : (
-        <>
-          <label className="ops-label">
-            {t('admin.selectClass')}
-            <select
-              className="ops-select"
-              value={selectedKey}
-              onChange={(e) => updateQueryParams(searchParams, setSearchParams, { rankingClass: e.target.value || null }, true)}
-            >
-              {classOptions.map((opt) => (
-                <option key={opt.key} value={opt.key}>{opt.label}</option>
-              ))}
-            </select>
-          </label>
-          {error && <div className="ops-alert">{error}</div>}
-          {loading ? <p className="ops-subtle">{t('common.loading')}</p> : <LeaderboardTable event={event} rows={rows} />}
-        </>
+        <LeaderboardTable event={event} rows={rows} />
       )}
     </section>
   )

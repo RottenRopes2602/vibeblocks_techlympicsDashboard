@@ -628,6 +628,74 @@
   color: #344154;
 }
 
+/* 노션식 필터 바 — 활성 조건 칩 + '조건 추가' 드롭다운 */
+.ops-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ops-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #cfd9e4;
+  border-radius: 999px;
+  background: #f3f7fb;
+  padding: 3px 4px 3px 12px;
+}
+
+.ops-filter-chip-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: #44546a;
+}
+
+.ops-filter-chip-select {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  color: #102030;
+  cursor: pointer;
+  min-height: 28px;
+  max-width: 220px;
+}
+
+.ops-filter-chip-x {
+  border: 0;
+  background: #dde6ef;
+  color: #44546a;
+  cursor: pointer;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 15px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ops-filter-chip-x:hover {
+  background: #c8d4e0;
+  color: #102030;
+}
+
+.ops-filter-add {
+  min-height: 32px;
+  border: 1px dashed #b9c5d4;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #1f6feb;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 12px;
+}
+
 .ops-file-picker {
   align-items: center;
   display: flex;
