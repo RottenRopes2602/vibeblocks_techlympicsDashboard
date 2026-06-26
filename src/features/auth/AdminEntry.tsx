@@ -3,7 +3,8 @@ import type { FormEvent } from 'react'
 import type { User } from 'firebase/auth'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../api'
-import { classifyCode, normalizeCode } from '../../api/codes'
+import { classifyCode, isDevInviteCode, normalizeCode } from '../../api/codes'
+import { DEV_AUTH_ENABLED } from '../../lib/devAuth'
 import type { RoleDoc } from '../../api/types'
 import { useT } from '../../lib/i18n'
 import { useToast } from '../../lib/toast'
@@ -44,7 +45,8 @@ export default function AdminEntry({
     setError('')
     try {
       const normalized = normalizeCode(inviteCode)
-      if (classifyCode(normalized) !== 'invite') {
+      const isInvite = classifyCode(normalized) === 'invite' || (DEV_AUTH_ENABLED && isDevInviteCode(normalized))
+      if (!isInvite) {
         const message = t('teacher.enterTeacherCodeError')
         setError(message)
         toast(message, 'error')

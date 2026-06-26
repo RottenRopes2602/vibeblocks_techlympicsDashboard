@@ -25,7 +25,7 @@ import type {
   TeacherSchoolView,
 } from './types'
 import { CHALLENGE_SLOTS, GRADES_BY_LEVEL } from './types'
-import { classifyCode, newJoinCode, newPublicId, newRecoveryCode, newTeacherCode, newInviteCode, normalizeCode, sha256Hex } from './codes'
+import { isDevInviteCode, isDevTeacherCode, newJoinCode, newPublicId, newRecoveryCode, newTeacherCode, newInviteCode, normalizeCode, sha256Hex } from './codes'
 import { averageSec, compareEntries, completedCount, isBetter, recordTimeSec } from './scoring'
 import { DEV_AUTH_ENABLED, getDevMockRole, setDevMockRole } from '../lib/devAuth'
 
@@ -442,7 +442,7 @@ export function createMockApi(): CompetitionApi {
     async validateTeacherCode(code) {
       const c = normalizeCode(code)
       let school = s.schools.find((x) => x.teacherCode === c)
-      if (!school && DEV_AUTH_ENABLED && classifyCode(c) === 'teacher') school = ensureMockSchool(c)
+      if (!school && DEV_AUTH_ENABLED && isDevTeacherCode(c)) school = ensureMockSchool(c)
       if (!school) throw new Error('TEACHER_CODE_NOT_FOUND')
       const event = s.events.find((x) => x.id === school.eventId)!
       return delay({ event, school: { id: school.id, name: school.name } })
@@ -451,7 +451,7 @@ export function createMockApi(): CompetitionApi {
     async bindTeacherSchool(code) {
       const c = normalizeCode(code)
       let school = s.schools.find((x) => x.teacherCode === c)
-      if (!school && DEV_AUTH_ENABLED && classifyCode(c) === 'teacher') school = ensureMockSchool(c)
+      if (!school && DEV_AUTH_ENABLED && isDevTeacherCode(c)) school = ensureMockSchool(c)
       if (!school) throw new Error('TEACHER_CODE_NOT_FOUND')
       if (!s.myRole) s.myRole = { uid: uid(), role: 'teacher', createdAt: now() }
       if (!s.mySchoolIds.includes(school.id)) s.mySchoolIds.push(school.id)
@@ -652,13 +652,13 @@ export function createMockApi(): CompetitionApi {
     async validateAdminInvite(code) {
       const c = normalizeCode(code)
       // DEV+mock: 발급 안 된 코드라도 형식(V-{10})만 맞으면 통과 — 테스트 편의
-      if (s.invites.has(c) || (DEV_AUTH_ENABLED && classifyCode(c) === 'invite')) return delay(undefined)
+      if (s.invites.has(c) || (DEV_AUTH_ENABLED && isDevInviteCode(c))) return delay(undefined)
       throw new Error('INVITE_NOT_FOUND')
     },
 
     async redeemAdminInvite(code) {
       const c = normalizeCode(code)
-      const okFormat = DEV_AUTH_ENABLED && classifyCode(c) === 'invite'
+      const okFormat = DEV_AUTH_ENABLED && isDevInviteCode(c)
       if (!s.invites.has(c) && !okFormat) throw new Error('INVITE_NOT_FOUND')
       s.invites.delete(c)
       s.myRole = { uid: s.myRole?.uid ?? uid(), role: 'admin', inviteCode: c, createdAt: now() }

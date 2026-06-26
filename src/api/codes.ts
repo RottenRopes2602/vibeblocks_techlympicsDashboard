@@ -29,6 +29,16 @@ export function normalizeCode(input: string): string {
   return input.trim().toUpperCase()
 }
 
+// DEV/mock 전용 느슨한 형식 검사 — 실코드 알파벳(0/1/O/I/L 제외)을 무시하고
+// prefix+길이만 본다(테스트 입력 편의: T-12345678 같이 1·0 포함도 허용).
+// production 경로(firestore·실 게이트)에선 절대 호출하지 않는다 — classifyCode(엄격)만.
+export function isDevTeacherCode(input: string): boolean {
+  return /^T-[A-Z0-9]{8}$/i.test(input.trim())
+}
+export function isDevInviteCode(input: string): boolean {
+  return /^V-[A-Z0-9]{10}$/i.test(input.trim())
+}
+
 export async function sha256Hex(text: string): Promise<string> {
   const data = new TextEncoder().encode(text)
   const digest = await crypto.subtle.digest('SHA-256', data)

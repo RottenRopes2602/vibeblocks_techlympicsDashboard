@@ -3,7 +3,8 @@ import type { FormEvent } from 'react'
 import type { ReactNode } from 'react'
 import type { User } from 'firebase/auth'
 import { api } from '../../api'
-import { classifyCode, normalizeCode } from '../../api/codes'
+import { classifyCode, isDevInviteCode, isDevTeacherCode, normalizeCode } from '../../api/codes'
+import { DEV_AUTH_ENABLED } from '../../lib/devAuth'
 import type { EventDoc, SchoolDoc } from '../../api/types'
 import { useT } from '../../lib/i18n'
 import { useToast } from '../../lib/toast'
@@ -71,7 +72,10 @@ export default function TeacherCodeGate({
     try {
       const normalized = normalizeCode(code)
       const kind = classifyCode(normalized)
-      if (kind === 'invite') {
+      // dev+mock 은 실코드 알파벳 제한 없이 형식(T-8 / V-10)만으로도 통과
+      const isInvite = kind === 'invite' || (DEV_AUTH_ENABLED && isDevInviteCode(normalized))
+      const isTeacher = kind === 'teacher' || (DEV_AUTH_ENABLED && isDevTeacherCode(normalized))
+      if (isInvite) {
         await api.validateAdminInvite(normalized)
         if (isRealUser(user)) {
           await redeemInvite(normalized)
@@ -81,7 +85,7 @@ export default function TeacherCodeGate({
         }
         return
       }
-      if (kind !== 'teacher') {
+      if (!isTeacher) {
         const message =
           kind === 'join'
             ? t('teacher.classCodeError')
