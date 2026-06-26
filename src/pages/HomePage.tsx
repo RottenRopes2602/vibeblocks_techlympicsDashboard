@@ -77,20 +77,12 @@ export default function HomePage() {
               </section>
             ) : null}
 
-            {/* ① 코드 없이 로그인/회원가입 (segmented 토글로 둘 다) */}
+            {/* ① 코드 없이 로그인/회원가입 (segmented 토글로 둘 다). 주최자 콘솔 링크는 두지 않음. */}
             {!isSignedIn && !isChecking ? (
-              <>
-                <AuthPanel title={t('home.authTitle')} onSignedIn={refreshRole} />
-                <div className="auth-actions">
-                  <span className="home-entry-or">{t('home.or')}</span>
-                  <button className="auth-button" type="button" onClick={() => navigate('/admin')}>
-                    {t('home.organizerEntry')}
-                  </button>
-                </div>
-              </>
+              <AuthPanel title={t('home.authTitle')} onSignedIn={refreshRole} />
             ) : null}
 
-            {/* 어드민 계정이 교사 입구로 들어옴 → 주최자 콘솔로 안내 (교사 입구 거부) */}
+            {/* 어드민 계정이 교사 입구로 들어옴 → 교사 입구 거부 안내 (주최자 콘솔 버튼은 두지 않음) */}
             {wrongDoor ? (
               <>
                 <AuthHeader user={user} role={role} label={t('home.accountLabel')} onRefresh={refreshRole} />
@@ -99,11 +91,6 @@ export default function HomePage() {
                     <p className="auth-eyebrow">{t('home.accountLabel')}</p>
                     <h2>{t('home.organizerAccountTitle')}</h2>
                     <p>{t('home.organizerAccountBody')}</p>
-                  </div>
-                  <div className="auth-actions">
-                    <button className="auth-button primary" type="button" onClick={() => navigate('/admin')}>
-                      {t('home.organizerEntry')}
-                    </button>
                   </div>
                 </section>
               </>

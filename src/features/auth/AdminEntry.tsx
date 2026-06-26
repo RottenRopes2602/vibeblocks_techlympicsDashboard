@@ -47,7 +47,7 @@ export default function AdminEntry({
       const normalized = normalizeCode(inviteCode)
       const isInvite = classifyCode(normalized) === 'invite' || (DEV_AUTH_ENABLED && isDevInviteCode(normalized))
       if (!isInvite) {
-        const message = t('teacher.enterTeacherCodeError')
+        const message = t('adminEntry.inviteCodeError')
         setError(message)
         toast(message, 'error')
         return
