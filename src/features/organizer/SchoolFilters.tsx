@@ -162,7 +162,12 @@ export function FilterBar({
         <span className="ops-filter-chip" key={dim}>
           <span className="ops-filter-chip-label">{dimLabel(dim, t)}</span>
           <select className="ops-filter-chip-select" value={values[dim] ?? ''} onChange={(e) => onSet(dim, e.target.value)}>
-            <option value="">{t('common.all')}</option>
+            {/* 필수 차원(예: 랭킹의 등급)은 'All' 없이 — 반드시 하나 골라야 함(등급별 데이터 분리) */}
+            {required.includes(dim) ? (
+              <option value="" disabled>{t('common.select')}</option>
+            ) : (
+              <option value="">{t('common.all')}</option>
+            )}
             {options[dim].map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
