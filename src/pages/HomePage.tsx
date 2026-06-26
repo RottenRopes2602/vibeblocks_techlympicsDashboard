@@ -4,22 +4,21 @@ import { api } from '../api'
 import type { RoleDoc } from '../api/types'
 import AuthHeader from '../features/auth/AuthHeader'
 import AuthPanel from '../features/auth/AuthPanel'
-import RoleLanding from '../features/auth/RoleLanding'
 import TeacherCodeGate from '../features/auth/TeacherCodeGate'
 import { useAuthSession } from '../features/auth/session'
 import { LanguageToggle, useT } from '../lib/i18n'
 import '../features/auth/auth.css'
 import styles from '../features/ranking/publicPages.module.css'
 
-type EntryMode = 'teacher' | 'sign-in'
-
+// 교사 홈 동선 (vb-352): ① 코드 없이 로그인/회원가입 먼저 → ② 로그인 후 역할(학교 바인딩)이
+// 없으면 그때 교사코드 입력 → ③ 바인딩되면 /teacher. 가입만 하고 코드 미입력 시 다음 방문에도
+// role 이 없어 ②로 돌아온다(선생님 페이지로 안 감). 어드민(주최) 동선은 /admin 전용.
 export default function HomePage() {
   const navigate = useNavigate()
   const t = useT()
   const { user, loading: authLoading, isSignedIn } = useAuthSession()
   const [role, setRole] = useState<RoleDoc | null>(null)
   const [roleLoading, setRoleLoading] = useState(false)
-  const [entryMode, setEntryMode] = useState<EntryMode>('teacher')
   const [error, setError] = useState<string | null>(null)
 
   const refreshRole = async () => {
@@ -51,7 +50,8 @@ export default function HomePage() {
   }, [isSignedIn, navigate, role])
 
   const isChecking = authLoading || roleLoading
-  const showRoleLanding = isSignedIn && !role && !isChecking
+  // 로그인했는데 역할이 없음 = 가입만 하고 학교 미바인딩 → 교사코드 입력 단계.
+  const needsTeacherCode = isSignedIn && !role && !isChecking
 
   return (
     <main className={styles.shell}>
@@ -68,42 +68,48 @@ export default function HomePage() {
         </div>
         <div className="auth-layout">
           <div className="auth-stack">
-            {isSignedIn ? <AuthHeader user={user} role={role} label={t('home.accountLabel')} onRefresh={refreshRole} /> : null}
-            {!isSignedIn && entryMode === 'sign-in' ? (
-              <AuthPanel title={t('auth.signIn')} mode="sign-in" onSignedIn={refreshRole} />
-            ) : null}
-
-            {!isSignedIn && entryMode === 'sign-in' ? (
-              <button className="auth-button" type="button" onClick={() => { setEntryMode('teacher'); setError(null) }}>
-                {t('home.backToTeacherCode')}
-              </button>
-            ) : null}
-
-            {!isSignedIn && entryMode === 'teacher' ? (
-              <TeacherCodeGate
-                user={user}
-                entryAside={
-                  <>
-                    <span className="home-entry-or">{t('home.or')}</span>
-                    <button className="auth-button" type="button" onClick={() => { setEntryMode('sign-in'); setError(null) }}>
-                      {t('auth.signIn')}
-                    </button>
-                  </>
-                }
-                onBound={async (role) => {
-                  await refreshRole()
-                  navigate(role === 'admin' ? '/admin' : '/teacher', { replace: true })
-                }}
-              />
-            ) : null}
-            {error ? <p className={styles.formError}>{error}</p> : null}
             {isChecking ? (
               <section className="auth-panel">
                 <p className="auth-eyebrow">{t('home.session')}</p>
                 <h2>{t('home.checkingAccount')}</h2>
               </section>
             ) : null}
-            {showRoleLanding ? <RoleLanding user={user} onRoleChanged={refreshRole} /> : null}
+
+            {/* ① 코드 없이 로그인/회원가입 (segmented 토글로 둘 다) */}
+            {!isSignedIn && !isChecking ? (
+              <>
+                <AuthPanel title={t('home.authTitle')} onSignedIn={refreshRole} />
+                <div className="auth-actions">
+                  <span className="home-entry-or">{t('home.or')}</span>
+                  <button className="auth-button" type="button" onClick={() => navigate('/admin')}>
+                    {t('home.organizerEntry')}
+                  </button>
+                </div>
+              </>
+            ) : null}
+
+            {/* ② 로그인 후 역할 없음 → 교사코드 입력 (가입 뒤 단계) */}
+            {needsTeacherCode ? (
+              <>
+                <AuthHeader user={user} role={role} label={t('home.accountLabel')} onRefresh={refreshRole} />
+                <section className="auth-panel">
+                  <div className="auth-panel-head">
+                    <p className="auth-eyebrow">{t('home.teacherCodeEyebrow')}</p>
+                    <h2>{t('home.teacherCodeTitle')}</h2>
+                    <p>{t('home.teacherCodeBody')}</p>
+                  </div>
+                </section>
+                <TeacherCodeGate
+                  user={user}
+                  onBound={async (boundRole) => {
+                    await refreshRole()
+                    navigate(boundRole === 'admin' ? '/admin' : '/teacher', { replace: true })
+                  }}
+                />
+              </>
+            ) : null}
+
+            {error ? <p className={styles.formError}>{error}</p> : null}
           </div>
         </div>
       </section>

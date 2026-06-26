@@ -81,11 +81,41 @@
   padding: 14px;
 }
 
+/* 진짜 탭바 — 하단 밑줄형(active=파란 밑줄). 칩/버튼처럼 보이던 것을 탭 affordance로. */
 .ops-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 12px 0 0;
+  gap: 4px;
+  margin: 16px 0 0;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.ops-tab {
+  appearance: none;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: #5b6b80;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 700;
+  justify-content: center;
+  margin-bottom: -2px; /* 밑줄이 탭바 baseline 과 겹치게 */
+  padding: 10px 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ops-tab:hover {
+  color: #172033;
+  border-bottom-color: #b9c5d4;
+}
+
+.ops-tab.active {
+  color: #1f6feb;
+  border-bottom-color: #1f6feb;
 }
 
 .ops-console-switcher {
@@ -93,7 +123,6 @@
 }
 
 .ops-button,
-.ops-tab,
 .ops-input,
 .ops-select,
 .ops-file {
@@ -102,8 +131,7 @@
   font: inherit;
 }
 
-.ops-button,
-.ops-tab {
+.ops-button {
   align-items: center;
   border: 1px solid #b9c5d4;
   background: #ffffff;
@@ -116,13 +144,11 @@
   text-decoration: none;
 }
 
-.ops-button:hover,
-.ops-tab:hover {
+.ops-button:hover {
   border-color: #526b91;
 }
 
-.ops-button.primary,
-.ops-tab.active {
+.ops-button.primary {
   background: #1f6feb;
   border-color: #1f6feb;
   color: #ffffff;
@@ -508,7 +534,11 @@
     min-width: 560px;
   }
 
-  .ops-button,
+  .ops-button {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
   .ops-tab {
     padding-left: 10px;
     padding-right: 10px;
