@@ -5,6 +5,7 @@ import type { User } from 'firebase/auth'
 import { api } from '../../api'
 import type { RoleDoc } from '../../api/types'
 import { auth } from '../../lib/firebase'
+import { DEV_AUTH_ENABLED, devSignOutUser } from '../../lib/devAuth'
 import { LanguageToggle, useT } from '../../lib/i18n'
 import { useToast } from '../../lib/toast'
 import ChangePasswordModal from './ChangePasswordModal'
@@ -42,7 +43,8 @@ export default function AuthHeader({
     setError('')
     window.__mockRole?.(null)
     try {
-      await signOut(auth)
+      if (DEV_AUTH_ENABLED) devSignOutUser()
+      else await signOut(auth)
       navigate('/', { replace: true })
     } finally {
       setBusy(false)
@@ -57,7 +59,8 @@ export default function AuthHeader({
     try {
       await api.deleteMyAccount()
       window.__mockRole?.(null)
-      await signOut(auth).catch(() => undefined)
+      if (DEV_AUTH_ENABLED) devSignOutUser()
+      else await signOut(auth).catch(() => undefined)
       toast(t('auth.accountDeleted'), 'success')
       navigate('/', { replace: true })
     } catch (err) {
